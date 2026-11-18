@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "683421288079",
+    "project_id": "car-showrooms-sa",
+    "storage_bucket": "car-showrooms-sa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:683421288079:android:b645b1e7f21ef4b74d12fa",
+        "android_client_info": {
+          "package_name": "com.example.car_showrooms_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDl7aMTLR1wcsjNw9PN6NxmnxIWSLBYK-U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
