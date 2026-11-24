@@ -1,3 +1,4 @@
+import 'dispute_and_subscription_manager.dart';
 import 'package:flutter/material.dart';
 import '../../core/luxury_theme.dart';
 import 'inspection_report_sheet.dart';
@@ -371,6 +372,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 children: [
                   _roleButton(0, isAdmin ? 'تسجيل معرض جديد' : 'إدارة معرضي'),
                   if (isAdmin) _roleButton(2, 'إضافة سيارة (لأي معرض)'),
+                  if (isAdmin) _roleButton(9, 'مركز النزاعات'),
                   _roleButton(3, 'صندوق الحجوزات'),
                   _roleButton(4, 'الفاحص المعتمد (تسجيل وطلبات)'),
                   _roleButton(1, 'حساب كابتن السطحة'),
@@ -395,6 +397,8 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         return _buildMyShowroomDashboard(myShowroom);
                       },
                     )
+            else if (_roleTab == 9 && isAdmin)
+              SizedBox(height: 600, child: AdminDisputeCenterTab())
             else if (_roleTab == 2 && isAdmin)
               StreamBuilder<List<ShowroomModel>>(
                 stream: widget.repository.watchShowrooms(),

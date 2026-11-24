@@ -1,9 +1,9 @@
+import 'my_orders_screen.dart';
 import 'package:flutter/material.dart';
 import '../../core/luxury_theme.dart';
 import '../../core/pricing_rules.dart';
 import '../../data/showroom_repository.dart';
 import 'buyer_verification_sheet.dart';
-import 'order_tracking_sheet.dart';
 
 String _formatPrice(num value) {
   final str = value.round().toString();
@@ -156,7 +156,7 @@ class RegionsHomeScreen extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                              onPressed: () => OrderTrackingSheet.show(context),
+                              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
                               icon: const Icon(Icons.confirmation_number_outlined, size: 18, color: LuxuryColors.gold),
                               label: const Text('متابعة حجزي', style: TextStyle(fontWeight: FontWeight.w800)),
                             ),
