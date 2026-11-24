@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/luxury_theme.dart';
 import '../../core/pricing_rules.dart';
+import '../../core/input_sanitizer.dart';
 
 class OrderTrackingSheet extends StatefulWidget {
   const OrderTrackingSheet({super.key});
@@ -24,6 +26,14 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
   final _phoneLast4Ctrl = TextEditingController();
   String? _selectedPath;
   bool _saving = false;
+  bool _demoShowAllPaths = kDebugMode;
+  String? _selectedDeliveryCity;
+  static const _deliveryCities = [
+    'الرياض', 'الدمام', 'الخبر', 'الظهران', 'الأحساء', 'الجبيل', 'حفر الباطن',
+    'جدة', 'مكة المكرمة', 'الطائف', 'المدينة المنورة', 'ينبع',
+    'بريدة (القصيم)', 'أبها (عسير)', 'خميس مشيط', 'تبوك', 'حائل',
+    'جازان', 'نجران', 'الباحة', 'سكاكا (الجوف)', 'عرعر',
+  ];
 
   static const _postConfirmPaths = [
     {
@@ -75,12 +85,12 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
     super.dispose();
   }
 
-  Future _confirmPath(DocumentReference ref, Map path) async {
+  Future _confirmPath(DocumentReference ref, Map path, int dynamicShippingFee) async {
     setState(() => _saving = true);
     try {
       final needsInsp = path['needs_inspection'] == true;
       final needsShip = path['needs_shipping'] == true;
-      final extraFee = (path['fee'] as int?) ?? 0;
+      final extraFee = (needsInsp ? PricingRules.inspectionTotal : 0) + (needsShip ? dynamicShippingFee : 0);
 
       await ref.update({
         'post_confirm_path': path['id'],
@@ -92,15 +102,17 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
         'shipping_status': needsShip ? 'pending_tow' : 'none',
         'inspector_share': needsInsp ? PricingRules.inspectorShare : 0,
         'platform_inspection_share': needsInsp ? PricingRules.platformInspectionShare : 0,
-        'tow_driver_share': needsShip ? PricingRules.driverTowShare(PricingRules.defaultShippingEstimate) : 0,
-        'platform_tow_share': needsShip ? PricingRules.platformTowShare(PricingRules.defaultShippingEstimate) : 0,
+        'buyer_city': _selectedDeliveryCity ?? 'الرياض',
+        'shipping_fee': needsShip ? dynamicShippingFee : 0,
+        'tow_driver_share': needsShip ? PricingRules.driverTowShare(dynamicShippingFee) : 0,
+        'platform_tow_share': needsShip ? PricingRules.platformTowShare(dynamicShippingFee) : 0,
         'status': 'path_selected',
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: LuxuryColors.success,
-          content: Text('تم اعتماد مسارك وإشعار الجهات المختصة: ${path['title']}'),
+          content: Text(needsInsp && needsShip ? 'تم حجز الفاحص والسطحة بنجاح ✓ وأُرسل تنبيه فوري بكامل التفاصيل.' : (needsInsp ? 'تم حجز الفاحص المعتمد بنجاح ✓ وأُرسل له تنبيه فوري.' : (needsShip ? 'تم حجز السطحة بنجاح ✓ وظهرت تفاصيل رحلتك لسائقي السطحات.' : 'تم اعتماد الاستلام المباشر من المعرض ✓'))),
         ),
       );
     } catch (e) {
@@ -111,7 +123,9 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
     }
   }
 
-  Widget _buildDynamicPathsSection(DocumentReference orderRef, String regionId) {
+  Widget _buildDynamicPathsSection(DocumentReference orderRef, String regionId, String buyerCity) {
+    final activeCity = _selectedDeliveryCity ?? (_deliveryCities.contains(buyerCity) ? buyerCity : 'الرياض');
+    final dynamicShip = PricingRules.estimateShippingFee(regionId, activeCity);
     return StreamBuilder(
       stream: FirebaseFirestore.instance
           .collection('inspectors')
@@ -119,14 +133,14 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
           .where('is_verified', isEqualTo: true)
           .snapshots(),
       builder: (context, inspSnap) {
-        final hasInspectors = (inspSnap.data?.docs ?? const []).isNotEmpty;
+        final hasInspectors = _demoShowAllPaths || (inspSnap.data?.docs ?? const []).isNotEmpty;
         return StreamBuilder(
           stream: FirebaseFirestore.instance
               .collection('tow_drivers')
               .where('current_region_id', isEqualTo: regionId)
               .snapshots(),
           builder: (context, towSnap) {
-            final hasTow = (towSnap.data?.docs ?? const []).isNotEmpty;
+            final hasTow = _demoShowAllPaths || (towSnap.data?.docs ?? const []).isNotEmpty;
             final availablePaths = _postConfirmPaths.where((p) {
               final needI = p['needs_inspection'] == true;
               final needS = p['needs_shipping'] == true;
@@ -139,9 +153,44 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                const Text(
-                  'تم تأكيد توفر سيارتك — اختر مسار إتمام الصفقة:',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: activeCity,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'حدد مدينة التسليم (يتحدث سعر الشحن تلقائياً)',
+                    prefixIcon: Icon(Icons.location_on_outlined, color: LuxuryColors.gold),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: _deliveryCities
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _selectedDeliveryCity = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'تم تأكيد توفر سيارتك — اختر مسار إتمام الصفقة:',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _demoShowAllPaths = !_demoShowAllPaths),
+                      icon: Icon(_demoShowAllPaths ? Icons.visibility : Icons.visibility_off, size: 15, color: LuxuryColors.gold),
+                      label: Text(
+                        _demoShowAllPaths ? 'وضع التجربة: الكل ظاهر' : 'إظهار الفحص والسطحة للتجربة',
+                        style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 11),
+                      ),
+                    ),
+                  ],
                 ),
                 if (!hasInspectors || !hasTow)
                   Padding(
@@ -191,7 +240,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              p['badge'] as String,
+                              p['id'] == 'inspection_and_shipping' ? '+${PricingRules.inspectionTotal + dynamicShip} ر.س' : (p['id'] == 'shipping_only' ? '+$dynamicShip ر.س' : p['badge'] as String),
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
                             ),
                           ],
@@ -213,8 +262,12 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                     onPressed: (_selectedPath == null || _saving)
                         ? null
                         : () {
-                            final chosen = availablePaths.firstWhere((e) => e['id'] == _selectedPath);
-                            _confirmPath(orderRef, chosen);
+                            final matches = availablePaths.where((e) => e['id'] == _selectedPath).toList();
+                            if (matches.isEmpty) {
+                              setState(() => _selectedPath = null);
+                              return;
+                            }
+                            _confirmPath(orderRef, matches.first, dynamicShip);
                           },
                     child: Text(
                       _saving ? 'جاري الاعتماد...' : 'اعتماد المسار المختار والمتابعة',
@@ -250,7 +303,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
           builder: (context, snap) {
             final docs = snap.data?.docs ?? const [];
             final codeQ = _codeCtrl.text.trim().toUpperCase();
-            final phoneQ = _phoneLast4Ctrl.text.trim();
+            final phoneQ = InputSanitizer.normalizeDigits(_phoneLast4Ctrl.text.trim());
 
             final canShow = codeQ.length >= 4 && phoneQ.length == 4;
             final matching = canShow
@@ -399,7 +452,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'حالة السطحة: $shipStatus',
+                              'حالة السطحة: ${shipStatus == 'pending_tow' ? 'تم الحجز ✓ (بانتظار قبول سائق السطحة)' : (shipStatus == 'in_transit' ? 'السيارة على السطحة في الطريق إليك 🚚' : 'تم التسليم بنجاح ✓')}',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                           ),
@@ -516,10 +569,47 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                       ),
                     ),
                   ],
+                  if (status == 'completed' || shipStatus == 'delivered') ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: LuxuryColors.danger,
+                          side: const BorderSide(color: LuxuryColors.danger),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: data['dispute_opened'] == true
+                            ? null
+                            : () async {
+                                await latestDoc.reference.update({
+                                  'dispute_opened': true,
+                                  'dispute_at': FieldValue.serverTimestamp(),
+                                });
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      backgroundColor: LuxuryColors.danger,
+                                      content: Text('تم فتح بلاغ اعتراض رسمي وتجميد مستحقات الفاحص (نافذة 24 ساعة / 50 كم).'),
+                                    ),
+                                  );
+                                }
+                              },
+                        icon: const Icon(Icons.report_problem_outlined, size: 18),
+                        label: Text(
+                          data['dispute_opened'] == true
+                              ? 'تم فتح بلاغ الاعتراض وجارٍ التحقق'
+                              : 'رفع اعتراض (نافذة 24 ساعة أو 50 كم من الاستلام)',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (status == 'confirmed')
                     _buildDynamicPathsSection(
                       latestDoc.reference,
                       (data['region_id'] ?? 'riyadh').toString(),
+                      (data['buyer_city'] ?? 'الرياض').toString(),
                     ),
                 ],
               ],

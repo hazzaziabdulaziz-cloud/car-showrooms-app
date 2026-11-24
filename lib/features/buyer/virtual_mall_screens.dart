@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/app_core.dart';
 import '../../core/luxury_theme.dart';
 import '../../core/pricing_rules.dart';
 import '../../data/showroom_repository.dart';
@@ -518,8 +517,6 @@ class _CarListingCard extends StatelessWidget {
     final monthly = _estimateMonthly(price);
     final srName = _readField(car, ['showroom_name', 'showroomName'], fallback: 'معرض معتمد').toString();
     final hub = _readField(car, ['city_hub', 'cityHub']).toString();
-    final title = '$make $model $year'.trim();
-    final fee = PricingRules.reservationFee(price);
 
     return SizedBox(
       width: 350,

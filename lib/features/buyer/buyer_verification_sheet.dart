@@ -1,8 +1,11 @@
+import '../../core/password_policy.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/luxury_theme.dart';
 import '../../core/pricing_rules.dart';
+import '../../core/input_sanitizer.dart';
 
 class BuyerVerificationSheet extends StatefulWidget {
   final String? interestedCarTitle;
@@ -49,6 +52,126 @@ class BuyerVerificationSheet extends StatefulWidget {
 class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
   // 0: بيانات المشتري | 1: كود OTP | 2: طريقة الشراء (كاش/تمويل) | 3: دفع عربون الحجز فقط
   int _step = 0;
+  final _authEmailCtrl = TextEditingController();
+  final _authPassCtrl = TextEditingController();
+  bool _isSignUp = true;
+  bool _authLoading = false;
+  String? _authError;
+
+  Future<void> _submitBuyerAuth() async {
+    final email = _authEmailCtrl.text.trim();
+    final pass = _authPassCtrl.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _authError = 'أدخل بريداً إلكترونياً صحيحاً');
+      return;
+    }
+    if (_isSignUp) {
+      final passErr = PasswordPolicy.validate(pass);
+      if (passErr != null) {
+        setState(() => _authError = passErr);
+        return;
+      }
+    } else if (pass.isEmpty) {
+      setState(() => _authError = 'يرجى إدخال كلمة المرور');
+      return;
+    }
+    setState(() { _authLoading = true; _authError = null; });
+    try {
+      if (_isSignUp) {
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: pass);
+      } else {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: pass);
+      }
+      if (mounted) setState(() => _authLoading = false);
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() {
+          _authLoading = false;
+          _authError = e.code == 'email-already-in-use'
+              ? 'هذا البريد مسجل مسبقاً — اختر "تسجيل الدخول"'
+              : (e.code == 'wrong-password' || e.code == 'invalid-credential'
+                  ? 'البريد أو كلمة المرور غير صحيحة'
+                  : 'تعذر إتمام العملية: ${e.message ?? e.code}');
+        });
+      }
+    }
+  }
+
+  Widget _buildBuyerAuthGate() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.lock_person_outlined, color: LuxuryColors.gold),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _isSignUp ? 'أنشئ حسابك قبل حجز السيارة' : 'سجّل دخولك لمتابعة الحجز',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
+                  ),
+                ),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'لحفظ حقوقك ومتابعة حجوزاتك وتقارير الفحص بأمان، يرجى التسجيل أولاً.',
+              style: TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _authEmailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: luxuryInput('البريد الإلكتروني', icon: Icons.email_outlined),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _authPassCtrl,
+              obscureText: true,
+              decoration: luxuryInput('كلمة مرور قوية (8+ أحرف، كبير/صغير/رقم/رمز)', icon: Icons.lock_outline),
+            ),
+            if (_authError != null) ...[
+              const SizedBox(height: 10),
+              Text(_authError!, style: const TextStyle(color: LuxuryColors.danger, fontSize: 12, fontWeight: FontWeight.w700)),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: LuxuryColors.navy,
+                  foregroundColor: LuxuryColors.gold,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _authLoading ? null : _submitBuyerAuth,
+                child: _authLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: LuxuryColors.gold))
+                    : Text(_isSignUp ? 'إنشاء حساب ومتابعة الحجز' : 'تسجيل الدخول ومتابعة الحجز', style: const TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => setState(() { _isSignUp = !_isSignUp; _authError = null; }),
+              child: Text(
+                _isSignUp ? 'لديك حساب بالفعل؟ سجّل الدخول' : 'مستخدم جديد؟ أنشئ حساباً الآن',
+                style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -61,7 +184,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
   bool _saving = false;
   bool _antiBypassAgreed = false;
 
-  String _paymentMethod = 'كاش';
+  String _paymentMethod = 'شراء كاش (قيمة السيارة)';
   String _salaryBank = 'مصرف الراجحي';
   String _workSector = 'حكومي';
   String _paymentGateway = 'مدى (Mada)';
@@ -75,7 +198,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
     'جازان', 'نجران', 'الباحة', 'سكاكا (الجوف)', 'عرعر',
   ];
 
-  static const _payments = ['كاش', 'تمويل بنكي', 'تأجير منتهي بالتمليك'];
+  static const _payments = ['شراء كاش (قيمة السيارة)', 'تمويل بنكي', 'تأجير منتهي بالتمليك'];
   static const _banks = [
     'مصرف الراجحي', 'البنك الأهلي السعودي (SNB)', 'بنك الرياض',
     'مصرف الإنماء', 'بنك البلاد', 'البنك السعودي الأول (SAB)',
@@ -96,7 +219,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
   }
 
   void _sendOtp() {
-    if (_nameCtrl.text.trim().length < 2 || _phoneCtrl.text.trim().length < 9) {
+    if (_nameCtrl.text.trim().length < 2 || !InputSanitizer.isValidSaudiPhone(_phoneCtrl.text)) {
       setState(() => _inlineError = 'يرجى إدخال الاسم ورقم الجوال بشكل صحيح (05xxxxxxxx).');
       return;
     }
@@ -108,7 +231,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
   }
 
   void _verifyOtp() {
-    final entered = _otpCtrl.text.trim();
+    final entered = InputSanitizer.normalizeDigits(_otpCtrl.text.trim());
     if (entered != _generatedOtp && entered != '1234') {
       setState(() => _inlineError = 'الكود غير مطابق. أدخل الكود الظاهر في الصندوق الذهبي أعلاه.');
       return;
@@ -129,24 +252,26 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
       _inlineError = null;
     });
     try {
-      final isFinancing = _paymentMethod != 'كاش';
+      final isFinancing = !_paymentMethod.contains('كاش');
       final orderCode = 'MRD-${100000 + Random().nextInt(899999)}';
       final handoverPin = (1000 + Random().nextInt(8999)).toString();
-      final phone = _phoneCtrl.text.trim();
-      final existingActive = await FirebaseFirestore.instance
-          .collection('orders')
-          .where('buyer_phone', isEqualTo: phone)
-          .where('status', whereIn: ['paid_waiting_showroom', 'confirmed', 'path_selected'])
-          .limit(1)
-          .get();
-      if (existingActive.docs.isNotEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _inlineError = 'لديك حجز نشط حالياً بهذا الرقم. لحماية المعارض من تعطيل البيع، يُسمح بحجز واحد نشط في نفس الوقت.';
-          _saving = false;
-        });
-        return;
-      }
+      final phone = InputSanitizer.cleanSaudiPhone(_phoneCtrl.text);
+      try {
+        final existingActive = await FirebaseFirestore.instance
+            .collection('orders')
+            .where('buyer_phone', isEqualTo: phone)
+            .where('status', whereIn: ['paid_waiting_showroom', 'confirmed', 'path_selected'])
+            .limit(1)
+            .get();
+        if (existingActive.docs.isNotEmpty) {
+          if (!mounted) return;
+          setState(() {
+            _inlineError = 'لديك حجز نشط حالياً بهذا الرقم. يُسمح بحجز واحد نشط في نفس الوقت.';
+            _saving = false;
+          });
+          return;
+        }
+      } catch (_) {}
       final phoneLast4 = phone.length >= 4 ? phone.substring(phone.length - 4) : phone;
       final slaDeadline = DateTime.now().add(const Duration(hours: 2));
 
@@ -160,6 +285,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
         'car_title': widget.interestedCarTitle ?? 'طلب عام',
         'car_price': widget.carPrice,
         'pricing_tier': PricingRules.tierLabel(widget.carPrice),
+        'buyer_uid': FirebaseAuth.instance.currentUser?.uid ?? '',
         'buyer_name': _nameCtrl.text.trim(),
         'buyer_phone': phone,
         'buyer_phone_last4': phoneLast4,
@@ -245,7 +371,10 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isFinancing = _paymentMethod != 'كاش';
+    if (FirebaseAuth.instance.currentUser == null) {
+      return _buildBuyerAuthGate();
+    }
+    final isFinancing = !_paymentMethod.contains('كاش');
     return Container(
       margin: const EdgeInsets.all(12),
       padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
@@ -279,7 +408,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                             : _step == 1
                                 ? '2/4: كود التفعيل (OTP)'
                                 : _step == 2
-                                    ? '3/4: طريقة الشراء (كاش / تمويل)'
+                                    ? '3/4: طريقة شراء السيارة'
                                     : '4/4: دفع عربون الحجز فقط',
                         style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
                       ),
@@ -371,7 +500,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                 ),
               ),
             ] else if (_step == 2) ...[
-              _chipGroup('طريقة الشراء', _payments, _paymentMethod, (v) => setState(() => _paymentMethod = v)),
+              _chipGroup('طريقة شراء السيارة (العربون يُدفع إلكترونياً)', _payments, _paymentMethod, (v) => setState(() => _paymentMethod = v)),
               if (isFinancing) ...[
                 const SizedBox(height: 14),
                 Container(
@@ -435,7 +564,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                     const SizedBox(height: 6),
                     const Align(
                       alignment: Alignment.centerRight,
-                      child: Text('يُخصم بالكامل من قيمة السيارة · 0% عمولة على المشتري', style: TextStyle(color: Colors.white60, fontSize: 11.5)),
+                      child: Text('يُخصم بالكامل من قيمة السيارة · مسترد 100% في حال عدم توفر السيارة', style: TextStyle(color: Colors.white70, fontSize: 11.5)),
                     ),
                   ],
                 ),
@@ -449,17 +578,17 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _antiBypassAgreed ? LuxuryColors.gold : LuxuryColors.danger.withValues(alpha: 0.4)),
                 ),
-                child: CheckboxListTile(
+                child: Material(color: Colors.transparent, child: CheckboxListTile(
                   value: _antiBypassAgreed,
                   activeColor: LuxuryColors.navy,
                   checkColor: LuxuryColors.gold,
-                  title: const Text('إقرار الأمانة وعدم الالتفاف (إلزامي)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                  title: const Text('إقرار الأمانة وحفظ الحقوق (إلزامي)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                   subtitle: const Text(
-                    'أقرّ بأن مجرد رؤيتي للسيارة ومعرفة المعرض عبر «معرضي» لا يُعفيني من العربون، وألتزم بإتمام الحجز داخل التطبيق. وفي حال تراجعي بدون عيب بعد التجميد يُصادر العربون (70% للمعرض و30% للمنصة).',
+                    'أقرّ بأن مجرد رؤيتي للسيارة ومعرفة المعرض عبر «معرضي» لا يُعفيني من العربون، وألتزم بإتمام الحجز داخل التطبيق. كما أقرّ بأن «معرضي» وسيط تقني موثّق فقط (المسؤولية الفنية على الفاحص والتجارية على المعرض والنقل على السطحة)، وأن لي نافذة اعتراض 24 ساعة (أو 50 كم) بعد الاستلام. وفي حال تراجعي بدون عيب بعد تأكيد المعرض وتجميد السيارة لا يُسترد العربون تعويضاً عن تعطيل البيع.',
                     style: TextStyle(fontSize: 11.5, color: LuxuryColors.textPrimary, height: 1.4),
                   ),
                   onChanged: (v) => setState(() => _antiBypassAgreed = v ?? false),
-                ),
+                )),
               ),
               const SizedBox(height: 14),
               SizedBox(

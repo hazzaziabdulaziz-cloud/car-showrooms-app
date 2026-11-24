@@ -1,48 +1,79 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'hazzazi.abdulaziz@gmail.com';
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'hazzazi.abdulaziz@gmail.com'
+      );
+    }
+
+    // المستخدمون: كل مستخدم يقرأ ويعدل ملفه فقط
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // المعارض والسيارات: القراءة متاحة للجميع، والتعديل لمالك المعرض أو المدير فقط
     match /showrooms/{showroomId} {
       allow read: if true;
-      allow create: if isAdmin() || (request.auth != null && request.resource.data.owner_uid == request.auth.uid);
-      allow update, delete: if isAdmin() || (request.auth != null && resource.data.owner_uid == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.owner_uid == request.auth.uid || isAdmin());
     }
 
     match /cars/{carId} {
       allow read: if true;
-      allow create: if isAdmin() || (request.auth != null && request.resource.data.owner_uid == request.auth.uid);
-      allow update, delete: if isAdmin() || (request.auth != null && resource.data.owner_uid == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.owner_uid == request.auth.uid || isAdmin());
     }
 
-    match /tow_drivers/{driverId} {
-      allow read: if isAdmin() || (request.auth != null && resource.data.owner_uid == request.auth.uid);
-      allow create: if isAdmin() || (request.auth != null && request.resource.data.owner_uid == request.auth.uid);
-      allow update, delete: if isAdmin() || (request.auth != null && resource.data.owner_uid == request.auth.uid);
-    }
-
-    match /inspectors/{inspectorId} {
-      allow read: if isAdmin() || (request.auth != null && resource.data.owner_uid == request.auth.uid) || resource.data.is_verified == true;
-      allow create: if isAdmin() || (request.auth != null && request.resource.data.owner_uid == request.auth.uid);
-      allow update, delete: if isAdmin();
-    }
-
+    // الطلبات: المشتري يقرأ طلباته فقط، ولا يُسمح بتغيير المبالغ أو حالة الدفع من الجوال
     match /orders/{orderId} {
-      allow create: if true;
-      allow read, update: if isAdmin() || request.auth != null;
+      allow read: if isSignedIn() && (
+        resource.data.buyer_uid == request.auth.uid ||
+        resource.data.showroom_owner_uid == request.auth.uid ||
+        resource.data.inspector_uid == request.auth.uid ||
+        resource.data.tow_uid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'deposit_paid', 'platform_fee', 'inspector_payout_status', 'car_price'
+        ])
+      );
       allow delete: if isAdmin();
     }
 
-    match /buyer_leads/{leadId} {
-      allow create: if true;
-      allow read, update, delete: if isAdmin();
+    // النزاعات والتقييمات
+    match /disputes/{disputeId} {
+      allow read: if isSignedIn() && (resource.data.buyer_uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
-    match /transactions/{txId} {
-      allow create: if true;
-      allow read, update, delete: if isAdmin() || request.auth != null;
+    match /ratings/{ratingId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // الفاحصون وكباتن السطحة
+    match /inspectors/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /tow_drivers/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
     }
   }
 }

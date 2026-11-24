@@ -58,6 +58,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   String _towRegionId = 'eastern';
   bool _acceptsBackhaul = true;
   bool _savingTow = false;
+  final Set<String> _busyDocIds = {};
   String _towCurrentRegion = 'riyadh';
   bool _updatingTowLoc = false;
 
@@ -364,19 +365,20 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.border),
               ),
-              child: Row(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
                 children: [
-                  Expanded(child: _roleButton(0, isAdmin ? 'تسجيل معرض جديد' : 'إدارة معرضي')),
-                  if (isAdmin) ...[
-                    const SizedBox(width: 4),
-                    Expanded(child: _roleButton(2, 'إضافة سيارة (لأي معرض)')),
-                  ],
-                  const SizedBox(width: 4),
-                  Expanded(child: _roleButton(1, 'حساب كابتن السطحة')),
+                  _roleButton(0, isAdmin ? 'تسجيل معرض جديد' : 'إدارة معرضي'),
+                  if (isAdmin) _roleButton(2, 'إضافة سيارة (لأي معرض)'),
+                  _roleButton(3, 'صندوق الحجوزات'),
+                  _roleButton(4, 'الفاحص المعتمد (تسجيل وطلبات)'),
+                  _roleButton(1, 'حساب كابتن السطحة'),
                 ],
               ),
             ),
             const SizedBox(height: 20),
+            _buildLiveAlertsBar(),
             if (_roleTab == 0)
               isAdmin
                   ? _buildRegisterShowroomCard()
@@ -809,6 +811,104 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
     );
   }
 
+
+  Future _runSafeDocAction(String docId, Future Function() action) async {
+    if (_busyDocIds.contains(docId)) return;
+    setState(() => _busyDocIds.add(docId));
+    try {
+      await action();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تنفيذ العملية: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busyDocIds.remove(docId));
+    }
+  }
+
+  Widget _buildLiveAlertsBar() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance.collection('orders').snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? const [];
+        int waitingShowroom = 0;
+        int waitingInspector = 0;
+        int waitingTow = 0;
+        for (final d in docs) {
+          final m = d.data();
+          if (m['status'] == 'paid_waiting_showroom') waitingShowroom++;
+          if (m['inspection_status'] == 'pending_inspector') waitingInspector++;
+          if (m['shipping_status'] == 'pending_tow') waitingTow++;
+        }
+        if (waitingShowroom == 0 && waitingInspector == 0 && waitingTow == 0) {
+          return const SizedBox.shrink();
+        }
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF3F2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: LuxuryColors.danger.withValues(alpha: 0.45)),
+          ),
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Icon(Icons.notifications_active, color: LuxuryColors.danger, size: 20),
+              const Text('تنبيهات فورية:', style: TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 13)),
+              if (waitingShowroom > 0)
+                ActionChip(
+                  backgroundColor: LuxuryColors.navy,
+                  label: Text('حجوزات جديدة ($waitingShowroom)', style: const TextStyle(color: LuxuryColors.gold, fontWeight: FontWeight.w800, fontSize: 12)),
+                  onPressed: () => setState(() => _roleTab = 3),
+                ),
+              if (waitingInspector > 0)
+                ActionChip(
+                  backgroundColor: LuxuryColors.gold,
+                  label: Text('طلبات فحص فوري ($waitingInspector)', style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 12)),
+                  onPressed: () => setState(() => _roleTab = 4),
+                ),
+              if (waitingTow > 0)
+                ActionChip(
+                  backgroundColor: LuxuryColors.success,
+                  label: Text('طلبات سطحة جديدة ($waitingTow)', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+                  onPressed: () => setState(() => _roleTab = 1),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+
+  static const _saudiBanks = [
+    'مصرف الراجحي', 'البنك الأهلي السعودي (SNB)', 'بنك الرياض',
+    'مصرف الإنماء', 'بنك البلاد', 'البنك السعودي الأول (SAB)',
+    'البنك السعودي الفرنسي (BSF)', 'البنك العربي الوطني (ANB)',
+    'بنك الجزيرة', 'البنك السعودي للاستثمار (SAIB)', 'بنك الخليج الدولي (ميم)',
+    'بنك STC (stc bank)', 'بنك D360', 'بنك فيجن (Vision Bank)', 'بنك آخر',
+  ];
+
+  Widget _bankDropdown(TextEditingController ctrl, String label) {
+    final current = _saudiBanks.contains(ctrl.text) ? ctrl.text : _saudiBanks.first;
+    if (ctrl.text.isEmpty) ctrl.text = current;
+    return DropdownButtonFormField<String>(
+      initialValue: current,
+      isExpanded: true,
+      decoration: luxuryInput(label, icon: Icons.account_balance_outlined),
+      items: _saudiBanks
+          .map((b) => DropdownMenuItem(value: b, child: Text(b, overflow: TextOverflow.ellipsis)))
+          .toList(),
+      onChanged: (v) {
+        if (v != null) setState(() => ctrl.text = v);
+      },
+    );
+  }
+
   Widget _buildOrdersInbox(bool isAdmin) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('orders').orderBy('created_at', descending: true).limit(30).snapshots(),
@@ -869,13 +969,13 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         if (status == 'paid_waiting_showroom') ...[
                           FilledButton(
                             style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy),
-                            onPressed: () => doc.reference.update({'status': 'confirmed'}),
+                            onPressed: _busyDocIds.contains(doc.id) ? null : () => _runSafeDocAction(doc.id, () => doc.reference.update({'status': 'confirmed'})),
                             child: const Text('تأكيد التوفر وتجميد السيارة'),
                           ),
                           const SizedBox(width: 8),
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.danger, side: const BorderSide(color: LuxuryColors.danger)),
-                            onPressed: () => doc.reference.update({'status': 'sold_in_showroom_refunded'}),
+                            onPressed: _busyDocIds.contains(doc.id) ? null : () => _runSafeDocAction(doc.id, () => doc.reference.update({'status': 'sold_in_showroom_refunded'})),
                             child: const Text('انباعت في الصالة (استرجاع العربون)'),
                           ),
                         ],
@@ -1035,7 +1135,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 const Divider(height: 28),
                 Row(
                   children: [
-                    Expanded(child: TextFormField(controller: _inspBankCtrl, decoration: luxuryInput('اسم البنك'), validator: (v) => SecurityGuard.validateRequiredText(v, 'اسم البنك'))),
+                    Expanded(child: _bankDropdown(_inspBankCtrl, 'اسم البنك')),
                     const SizedBox(width: 12),
                     Expanded(flex: 2, child: TextFormField(controller: _inspIbanCtrl, decoration: luxuryInput('الآيبان لتحويل أتعاب الفحص (SA + 22 رقماً)'), validator: IbanValidator.validateSaudiIban)),
                   ],
@@ -1088,7 +1188,10 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${d['order_code']} · ${d['car_title']} (${d['showroom_name']})', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                        Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 14.5)),
+                        const SizedBox(height: 4),
+                        Text('المعرض: ${d['showroom_name'] ?? '-'} · المنطقة: ${findRegion((d['region_id'] ?? 'riyadh').toString()).nameAr}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
+                        Text('المشتري: ${d['buyer_name'] ?? '-'} · الجوال: ${d['buyer_phone'] ?? '-'} · حصة الفاحص: 200 ر.س (تُحجز 48 ساعة)', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: LuxuryColors.navy)),
                         const SizedBox(height: 8),
                         FilledButton.icon(
                           style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
@@ -1160,7 +1263,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         else
                           FilledButton(
                             style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy),
-                            onPressed: () => doc.reference.update({'is_verified': true, 'status': 'verified'}),
+                            onPressed: _busyDocIds.contains(doc.id) ? null : () => _runSafeDocAction(doc.id, () => doc.reference.update({'is_verified': true, 'status': 'verified'})),
                             child: const Text('اعتماد وتوثيق', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
                           ),
                       ],
@@ -1197,7 +1300,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                   activeColor: LuxuryColors.navy,
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
-                    'أتعهد أمام الله ثم أمام منصة «معرضي» بمعاينة السيارة قبل التحميل، وأتحمل كامل المسؤولية النظامية والمالية عن أي ضرر أو خدش أو حادث يحدث للسيارة أثناء النقل وحتى تسليمها للمشتري.',
+                    'أتعهد أمام الله ثم أمام منصة «معرضي» بمعاينة السيارة وتصويرها 4 صور واضحة (أمام، خلف، يمين، يسار) قبل التحميل، وأقرّ بأن «معرضي» وسيط تقني فقط، وأتحمل كامل المسؤولية النظامية والمالية عن أي ضرر أو خدش أو حادث يحدث للسيارة أثناء التحميل والنقل وحتى تسليمها للمشتري.',
                     style: TextStyle(fontSize: 12, height: 1.45, fontWeight: FontWeight.w600),
                   ),
                   onChanged: (v) => setDlgState(() => agreed = v ?? false),
@@ -1302,7 +1405,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('رحلات الشحن الواردة (حصة السطحة 90% · حصة معرضي 10% بحد أقصى 80 ر.س)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              const Text('رحلات الشحن الواردة (حصة السطحة 90% · حصة معرضي 10%)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
               const Divider(height: 18),
               if (docs.isEmpty)
                 const Text('لا توجد رحلات شحن جديدة حالياً.', style: TextStyle(color: LuxuryColors.textSecondary))
@@ -1321,7 +1424,8 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
-                              Text('من: ${d['showroom_name']} ← إلى: ${d['buyer_city']}', style: const TextStyle(fontSize: 12, color: LuxuryColors.textSecondary)),
+                              Text('التحميل من: ${d['showroom_name'] ?? '-'} (${findRegion((d['region_id'] ?? 'riyadh').toString()).nameAr}) ← التسليم إلى: ${d['buyer_city'] ?? '-'}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
+                              Text('المشتري: ${d['buyer_name'] ?? '-'} · الجوال: ${d['buyer_phone'] ?? '-'} · حصتك (90%): ${d['tow_driver_share'] ?? 585} ر.س', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
                             ],
                           ),
                         ),
@@ -1334,7 +1438,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         else
                           FilledButton(
                             style: FilledButton.styleFrom(backgroundColor: LuxuryColors.success),
-                            onPressed: () => doc.reference.update({'shipping_status': 'delivered'}),
+                            onPressed: _busyDocIds.contains(doc.id) ? null : () => _runSafeDocAction(doc.id, () => doc.reference.update({'shipping_status': 'delivered'})),
                             child: const Text('تأكيد التسليم ✓', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
                           ),
                       ],
@@ -1363,7 +1467,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           children: [
             const Text('تسجيل كابتن سطحة', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            const Text('التسجيل مجاني — عمولة المنصة 10% فقط بحد أقصى 80 ر.س للرحلة.', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            const Text('التسجيل مجاني — عمولة المنصة 10% فقط لكل رحلة.', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
             const SizedBox(height: 18),
             Row(
               children: [
@@ -1419,11 +1523,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: _towBankCtrl,
-                    decoration: const InputDecoration(labelText: 'اسم البنك'),
-                    validator: (v) => SecurityGuard.validateRequiredText(v, 'اسم البنك'),
-                  ),
+                  child: _bankDropdown(_towBankCtrl, 'اسم البنك'),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
