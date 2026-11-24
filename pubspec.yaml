@@ -39,6 +39,8 @@ dependencies:
   firebase_auth: ^7.1.0
   cloud_firestore: ^7.2.0
   firebase_storage: ^14.1.0
+  qr_flutter: ^4.1.0
+  google_fonts: ^9.0.0
 
 dev_dependencies:
   flutter_test:
