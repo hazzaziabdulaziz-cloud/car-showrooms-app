@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
@@ -138,14 +139,19 @@ function generateZatcaQrBase64(sellerName, vatNumber, timestampIso, totalWithVat
 // 5. Webhook محمي بتوقيع سري لبوابة الدفع (Moyasar / Tap / HyperPay)
 exports.paymentSplitWebhook = onRequest({ region: REGION }, async (req, res) => {
   if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
-  const expectedSecret = process.env.PAYMENT_WEBHOOK_SECRET;
-  const providedSecret = req.get("x-webhook-secret");
-  if (!expectedSecret || providedSecret !== expectedSecret) {
+  const expectedSecret = process.env.PAYMENT_WEBHOOK_SECRET || "";
+  const providedSecret = req.get("x-webhook-secret") || "";
+  const a = Buffer.from(expectedSecret, "utf8");
+  const b = Buffer.from(providedSecret, "utf8");
+  if (!expectedSecret || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return res.status(401).json({ ok: false, error: "unauthorized_webhook" });
   }
 
   const { orderId, status, commissionTotal } = req.body || {};
-  if (!orderId || status !== "paid") return res.status(400).send("ignored");
+  if (!orderId || typeof orderId !== "string" || status !== "paid") return res.status(400).send("ignored");
+  const existing = await db.collection("orders").doc(orderId).get();
+  if (!existing.exists) return res.status(404).send("order_not_found");
+  if (existing.data()?.deposit_paid === true) return res.status(200).json({ ok: true, idempotent: true });
 
   const vat = (Number(commissionTotal || 50) * 15) / 115;
   const qr = generateZatcaQrBase64(

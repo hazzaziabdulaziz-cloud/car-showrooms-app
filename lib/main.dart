@@ -1,14 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/analytics_and_accounting_service.dart';
 import 'core/app_error_shield.dart';
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'firebase_options.dart';
-import 'core/app_core.dart';
 import 'core/luxury_theme.dart';
 import 'data/showroom_repository.dart';
 import 'features/buyer/virtual_mall_screens.dart';
 import 'features/partners/partners_portal_screen.dart';
+import 'features/shared/legal_and_privacy_screen.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,17 +27,40 @@ class ShowroomPlatformApp extends StatefulWidget {
 }
 
 class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
-  int _currentTab = 0;
+  final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
   final ShowroomRepository _repository = ShowroomRepository();
+  int _currentTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _handleInitialDeepLink();
+  }
+
+  Future<void> _handleInitialDeepLink() async {
+    final segs = Uri.base.pathSegments;
+    if (segs.length >= 2 && segs[0] == 'c' && segs[1].isNotEmpty) {
+      final carId = segs[1];
+      try {
+        final doc = await FirebaseFirestore.instance.collection('cars').doc(carId).get();
+        if (doc.exists && mounted) {
+          final car = CarListingModel.fromDoc(doc);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _navKey.currentState?.push(MaterialPageRoute(builder: (_) => CarDetailsScreen(car: car)));
+          });
+        }
+      } catch (_) {}
+    }
+  }
 
   Widget _buildNavSwitcher() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSubtle,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
+        color: LuxuryColors.navyLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: LuxuryColors.gold.withValues(alpha: 0.45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -52,13 +76,13 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
   Widget _navTabItem({required int index, required String label}) {
     final isSelected = _currentTab == index;
     return InkWell(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(8),
       onTap: () => setState(() => _currentTab = index),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          color: isSelected ? LuxuryColors.gold : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           label,
@@ -66,8 +90,8 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
           softWrap: false,
           style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isSelected ? AppColors.onPrimary : AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+            color: isSelected ? LuxuryColors.navy : Colors.white,
           ),
         ),
       ),
@@ -79,6 +103,7 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
     final fontFamily = GoogleFonts.ibmPlexSansArabic().fontFamily;
 
     return MaterialApp(
+      navigatorKey: _navKey,
       debugShowCheckedModeBanner: false,
       title: 'معرضي',
       builder: (context, child) => Directionality(
@@ -90,41 +115,52 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
         fontFamily: fontFamily,
         scaffoldBackgroundColor: LuxuryColors.background,
         colorScheme: const ColorScheme.light(
-          primary: AppColors.primary,
-          onPrimary: AppColors.onPrimary,
-          secondary: AppColors.textSecondary,
-          surface: AppColors.surface,
-          onSurface: AppColors.textPrimary,
-          error: AppColors.danger,
+          primary: LuxuryColors.navy,
+          onPrimary: Colors.white,
+          secondary: LuxuryColors.gold,
+          surface: LuxuryColors.surface,
+          onSurface: LuxuryColors.textPrimary,
+          error: LuxuryColors.danger,
         ),
         appBarTheme: const AppBarTheme(
-          toolbarHeight: 60,
+          toolbarHeight: 62,
           backgroundColor: LuxuryColors.navy,
           foregroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 0,
-          shape: Border(bottom: BorderSide(color: AppColors.border)),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: AppColors.surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14), errorMaxLines: 3,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+          fillColor: LuxuryColors.surface,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          errorMaxLines: 3,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: LuxuryColors.border)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: LuxuryColors.border)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: LuxuryColors.gold, width: 1.5)),
         ),
       ),
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('معرضي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          actions: [_buildNavSwitcher()],
+      home: Builder(
+        builder: (homeCtx) => Scaffold(
+          appBar: AppBar(
+            title: const Text('معرضي', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
+            actions: [
+              _buildNavSwitcher(),
+              IconButton(
+                tooltip: 'الشروط وسياسة الخصوصية (PDPL)',
+                icon: const Icon(Icons.policy_outlined, color: LuxuryColors.gold),
+                onPressed: () => Navigator.of(homeCtx).push(
+                  MaterialPageRoute(builder: (_) => const LegalAndPrivacyScreen()),
+                ),
+              ),
+            ],
+          ),
+          body: _currentTab == 0
+              ? RegionsHomeScreen(
+                  repository: _repository,
+                  onOpenPartnerPortal: () => setState(() => _currentTab = 1),
+                )
+              : PartnersPortalScreen(repository: _repository),
         ),
-        body: _currentTab == 0
-            ? RegionsHomeScreen(
-                repository: _repository,
-                onOpenPartnerPortal: () => setState(() => _currentTab = 1),
-              )
-            : PartnersPortalScreen(repository: _repository),
       ),
     );
   }

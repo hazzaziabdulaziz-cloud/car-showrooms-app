@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// درع حماية شامل للتطبيق: يمنع توقف البرنامج بالكامل ويعزل الأخطاء.
 class AppErrorShield {

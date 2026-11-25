@@ -44,45 +44,6 @@ RegionInfo findRegion(String id) {
   return kSaudiRegions.firstWhere((r) => r.id == id, orElse: () => kSaudiRegions.first);
 }
 
-class PricingCalculator {
-  static const int bookingPrice = 99;
-  static const int inspectionPrice = 220;
-  static const int inspectionPlatformFee = 45;
-  static const int maxTowCommission = 80;
-
-  static Map<String, int> estimateTow({
-    required String fromRegionId,
-    required String toRegionId,
-    required bool isBackhaul,
-  }) {
-    if (fromRegionId == toRegionId) {
-      final cost = isBackhaul ? 105 : 150;
-      return {'km': 25, 'cost': cost};
-    }
-
-    final origin = findRegion(fromRegionId);
-    final destination = findRegion(toRegionId);
-    const degToRad = 0.017453292519943295;
-    final dLat = (destination.lat - origin.lat) * degToRad;
-    final dLng = (destination.lng - origin.lng) * degToRad;
-    final haversine = pow(sin(dLat / 2), 2) +
-        cos(origin.lat * degToRad) * cos(destination.lat * degToRad) * pow(sin(dLng / 2), 2);
-    final directKm = 12742.0 * asin(min(1.0, sqrt(haversine.toDouble())));
-    final roadKm = max(30, (directKm * 1.25).round());
-
-    int towFee = (150 + (roadKm * 1.2)).round();
-    if (isBackhaul) towFee = (towFee * 0.70).round();
-    return {'km': roadKm, 'cost': towFee};
-  }
-
-  static int towCommissionFor(int towCost) {
-    final tenPercent = (towCost * 0.10).round();
-    return min(tenPercent, maxTowCommission);
-  }
-
-  static int serviceFeeFor(int baseAmount) => ((baseAmount * 0.025) + 2.0).ceil();
-}
-
 class ShowroomModel {
   final String id;
   final String commercialName;

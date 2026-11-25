@@ -13,20 +13,20 @@ service cloud.firestore {
       );
     }
 
-    // === الإحصائيات والتتبع ===
+    // === الإحصائيات والتتبع (مع حدود حجم لمنع إغراق القاعدة) ===
     match /analytics_summary/{docId} {
       allow read: if isAdmin();
-      allow create, update: if isSignedIn();
+      allow create, update: if isSignedIn() && docId == 'global';
       allow delete: if false;
     }
     match /analytics_daily/{docId} {
       allow read: if isAdmin();
-      allow create, update: if isSignedIn();
+      allow create, update: if isSignedIn() && docId.size() <= 12;
       allow delete: if false;
     }
     match /analytics_events/{docId} {
       allow read: if isAdmin();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.keys().size() <= 6;
       allow update, delete: if false;
     }
 
@@ -44,7 +44,14 @@ service cloud.firestore {
     // === الفواتير وسيستم الحسابات ===
     match /invoices/{invoiceId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
-      allow create: if isAdmin() || (isSignedIn() && request.resource.data.customerUid == request.auth.uid);
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.customerUid == request.auth.uid &&
+        request.resource.data.total is number &&
+        request.resource.data.total >= 0 &&
+        request.resource.data.total <= 500000 &&
+        request.resource.data.keys().size() <= 18
+      );
       allow update, delete: if isAdmin();
     }
     match /ledger_entries/{entryId} {
@@ -53,42 +60,75 @@ service cloud.firestore {
         isSignedIn() &&
         request.resource.data.direction == 'in' &&
         request.resource.data.amount is number &&
-        request.resource.data.amount > 0
+        request.resource.data.amount > 0 &&
+        request.resource.data.amount <= 500000 &&
+        request.resource.data.keys().size() <= 14
       );
     }
 
     // === سجل الأخطاء المعزولة ===
     match /app_error_logs/{logId} {
       allow read, delete: if isAdmin();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.keys().size() <= 6 &&
+        request.resource.data.error is string &&
+        request.resource.data.error.size() <= 600;
       allow update: if false;
     }
 
-    // === المستخدمون ===
+    // === المستخدمون (منع تصعيد الصلاحيات) ===
     match /users/{uid} {
-      allow read, write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if isAdmin() || (
+        isSignedIn() &&
+        request.auth.uid == uid &&
+        !request.resource.data.keys().hasAny(['admin', 'isAdmin', 'role'])
+      );
+      allow delete: if isAdmin();
     }
 
-    // === المعارض والسيارات ===
+    // === المعارض (منع التوثيق الذاتي المزوّر) ===
     match /showrooms/{showroomId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.owner_uid == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.owner_uid == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.owner_uid == request.auth.uid &&
+        request.resource.data.is_verified == false &&
+        request.resource.data.is_prime_spot == false
+      );
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.owner_uid == request.auth.uid &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'is_verified', 'is_prime_spot', 'rating', 'owner_uid'
+        ])
+      );
+      allow delete: if isAdmin();
     }
 
+    // === السيارات (التحقق من الملكية والأسعار المنطقية) ===
     match /cars/{carId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.owner_uid == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.owner_uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+        request.resource.data.owner_uid == request.auth.uid &&
+        request.resource.data.price is int &&
+        request.resource.data.price >= 5000 &&
+        request.resource.data.price <= 20000000;
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.owner_uid == request.auth.uid &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['owner_uid', 'showroom_id'])
+      );
+      allow delete: if isSignedIn() && (resource.data.owner_uid == request.auth.uid || isAdmin());
     }
 
-    // === عملاء الحجز (buyer_leads) ===
+    // === عملاء الحجز ===
     match /buyer_leads/{leadId} {
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.keys().size() <= 12;
       allow read, update, delete: if isAdmin();
     }
 
-    // === الطلبات والحجوزات ===
+    // === الطلبات والحجوزات (Zero-Trust) ===
     match /orders/{orderId} {
       allow read: if isSignedIn() && (
         isAdmin() ||
@@ -99,7 +139,12 @@ service cloud.firestore {
         resource.data.inspection_status == 'pending_inspector' ||
         resource.data.shipping_status == 'pending_tow'
       );
-      allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.buyer_uid == request.auth.uid &&
+        request.resource.data.status == 'paid_waiting_showroom' &&
+        request.resource.data.invoice_issued == false &&
+        request.resource.data.total_paid is int &&
+        request.resource.data.total_paid >= 0;
       allow update: if isAdmin() || (
         isSignedIn() &&
         (
@@ -113,7 +158,7 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'deposit_paid', 'platform_fee', 'inspector_payout_status',
           'car_price', 'total_paid', 'reservation_fee', 'handover_pin',
-          'escrow_protected', 'buyer_uid'
+          'escrow_protected', 'buyer_uid', 'showroom_owner_uid', 'order_code'
         ])
       );
       allow delete: if isAdmin();
@@ -122,35 +167,56 @@ service cloud.firestore {
     // === النزاعات والتقييمات ===
     match /disputes/{disputeId} {
       allow read: if isSignedIn() && (resource.data.buyer_uid == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.buyer_uid == request.auth.uid &&
+        request.resource.data.status == 'open_escrow_frozen' &&
+        request.resource.data.reason is string &&
+        request.resource.data.reason.size() >= 3 &&
+        request.resource.data.reason.size() <= 1000;
       allow update, delete: if isAdmin();
     }
 
     match /ratings/{ratingId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.buyer_uid == request.auth.uid &&
+        request.resource.data.stars is int &&
+        request.resource.data.stars >= 1 &&
+        request.resource.data.stars <= 5 &&
+        request.resource.data.comment is string &&
+        request.resource.data.comment.size() <= 500;
       allow update, delete: if isAdmin();
     }
 
-    // === الفاحصون وكباتن السطحة (يدعم owner_uid و uid) ===
+    // === الفاحصون وكباتن السطحة (منع التوثيق الذاتي) ===
     match /inspectors/{docId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (
-        resource.data.owner_uid == request.auth.uid ||
-        resource.data.uid == request.auth.uid ||
-        isAdmin()
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.owner_uid == request.auth.uid &&
+        request.resource.data.is_verified == false
       );
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        (resource.data.owner_uid == request.auth.uid || resource.data.uid == request.auth.uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_verified', 'owner_uid'])
+      );
+      allow delete: if isAdmin();
     }
 
     match /tow_drivers/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (
-        resource.data.owner_uid == request.auth.uid ||
-        resource.data.uid == request.auth.uid ||
-        isAdmin()
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        (resource.data.owner_uid == request.auth.uid || resource.data.uid == request.auth.uid)
       );
+      allow delete: if isAdmin();
+    }
+
+    // === إغلاق افتراضي لأي مسار غير مصرّح به (Default Deny-All) ===
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
