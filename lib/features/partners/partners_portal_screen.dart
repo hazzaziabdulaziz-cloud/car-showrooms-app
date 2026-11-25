@@ -32,6 +32,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   final _passCtrl = TextEditingController();
   bool _isLoginMode = true;
   bool _authLoading = false;
+  String _signupPartnerType = 'showroom';
 
   int _roleTab = 0;
   String? _adminSelectedShowroomId;
@@ -182,10 +183,16 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           password: _passCtrl.text.trim(),
         );
       } else {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: _emailCtrl.text.trim(),
           password: _passCtrl.text.trim(),
         );
+        if (cred.user != null) {
+          await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
+            'partner_type': _signupPartnerType,
+            'created_at': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -384,6 +391,38 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                           ? ((v == null || v.isEmpty) ? 'يرجى إدخال كلمة المرور.' : null)
                           : PasswordPolicy.validate(v),
                     ),
+                    if (!_isLoginMode) ...[
+                      const SizedBox(height: 14),
+                      const Text('اختر نوع حسابك (تفتح لك لوحة تحكم مخصصة لخدمتك فقط):', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('معرض سيارات'),
+                            selected: _signupPartnerType == 'showroom',
+                            selectedColor: LuxuryColors.navy,
+                            labelStyle: TextStyle(color: _signupPartnerType == 'showroom' ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700),
+                            onSelected: (_) => setState(() => _signupPartnerType = 'showroom'),
+                          ),
+                          ChoiceChip(
+                            label: const Text('فاحص معتمد'),
+                            selected: _signupPartnerType == 'inspector',
+                            selectedColor: LuxuryColors.navy,
+                            labelStyle: TextStyle(color: _signupPartnerType == 'inspector' ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700),
+                            onSelected: (_) => setState(() => _signupPartnerType = 'inspector'),
+                          ),
+                          ChoiceChip(
+                            label: const Text('كابتن سطحة'),
+                            selected: _signupPartnerType == 'tow_driver',
+                            selectedColor: LuxuryColors.navy,
+                            labelStyle: TextStyle(color: _signupPartnerType == 'tow_driver' ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700),
+                            onSelected: (_) => setState(() => _signupPartnerType = 'tow_driver'),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     SizedBox(
                       width: double.infinity,
@@ -414,8 +453,72 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
     );
   }
 
+  Widget _buildRoleChooserForLegacyUser(User user) {
+    Future<void> pick(String type) async {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'partner_type': type,
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            _luxuryCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('اختر نوع خدمتك للدخول إلى لوحتك المخصصة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                  const SizedBox(height: 6),
+                  const Text('كل خدمة لها لوحة تحكم مستقلة تماماً عن الخدمات الأخرى.', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
+                  const SizedBox(height: 18),
+                  ListTile(
+                    leading: const Icon(Icons.storefront, color: LuxuryColors.gold),
+                    title: const Text('لوحة تحكم معرض سيارات', style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('إدارة سيارات المعرض، ملصقات QR، وصندوق الحجوزات'),
+                    trailing: FilledButton(style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold), onPressed: () => pick('showroom'), child: const Text('دخول')),
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.fact_check_outlined, color: LuxuryColors.gold),
+                    title: const Text('لوحة تحكم فاحص سيارات معتمد', style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('استقبال مهام الفحص ورفع التقارير الرسمية (200 ر.س/فحص)'),
+                    trailing: FilledButton(style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold), onPressed: () => pick('inspector'), child: const Text('دخول')),
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.local_shipping_outlined, color: LuxuryColors.gold),
+                    title: const Text('لوحة تحكم كابتن سطحة', style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('تحديث موقعك واستقبال رحلات الشحن وتوثيق الـ 4 صور (90%)'),
+                    trailing: FilledButton(style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold), onPressed: () => pick('tow_driver'), child: const Text('دخول')),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAuthenticatedPortal(User user) {
     final isAdmin = isAdminEmail(user.email);
+    if (!isAdmin) {
+      return StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final pType = ((snap.data?.data() as Map?)?['partner_type'] ?? '').toString();
+          if (pType.isEmpty) return _buildRoleChooserForLegacyUser(user);
+          return _buildIsolatedRolePortal(user, pType);
+        },
+      );
+    }
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -538,6 +641,76 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
               _buildInspectorSection(isAdmin)
             else
               Column(children: [_buildTowLocationSwitchCard(), const SizedBox(height: 14), _buildTowTasksList(), const SizedBox(height: 18), _buildRegisterTowCard()]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIsolatedRolePortal(User user, String pType) {
+    final title = pType == 'showroom'
+        ? 'لوحة تحكم المعرض'
+        : (pType == 'inspector' ? 'لوحة تحكم الفاحص المعتمد' : 'لوحة تحكم كابتن السطحة');
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780),
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(color: LuxuryColors.navy, borderRadius: BorderRadius.circular(14)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
+                      Text(user.email ?? '', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                    ],
+                  ),
+                  TextButton.icon(
+                    onPressed: () => FirebaseAuth.instance.signOut(),
+                    icon: const Icon(Icons.logout, size: 16, color: Colors.white),
+                    label: const Text('خروج', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (pType == 'showroom') ...[
+              Wrap(
+                spacing: 8,
+                children: [
+                  _roleButton(0, 'إدارة معرضي والمخزون'),
+                  _roleButton(3, 'صندوق حجوزات معرضي'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (_roleTab == 3)
+                _buildOrdersInbox(false)
+              else
+                StreamBuilder<ShowroomModel?>(
+                  stream: widget.repository.watchMyShowroom(user.uid),
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+                      return const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()));
+                    }
+                    final myShowroom = snap.data;
+                    return myShowroom == null ? _buildRegisterShowroomCard() : _buildMyShowroomDashboard(myShowroom);
+                  },
+                ),
+            ] else if (pType == 'inspector') ...[
+              _buildInspectorSection(false),
+            ] else ...[
+              _buildTowLocationSwitchCard(),
+              const SizedBox(height: 14),
+              _buildTowTasksList(),
+              const SizedBox(height: 18),
+              _buildRegisterTowCard(),
+            ],
           ],
         ),
       ),
@@ -1204,8 +1377,16 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
     );
     if (ok != true) return;
     final fullReason = noteCtrl.text.trim().isEmpty ? reason : '$reason — ${noteCtrl.text.trim()}';
+    final isBuyerBackedOut = reason.contains('تراجع المشتري');
+    final isFinancingRejected = reason.contains('رفض التمويل');
+    final newStatus = isBuyerBackedOut
+        ? 'pending_admin_forfeit_review'
+        : (isFinancingRejected ? 'cancelled_financing_rejected' : 'cancelled_after_confirm');
+    final refundDecision = isBuyerBackedOut ? 'pending_admin_70_30' : 'refund_buyer_100';
+
     await ref.update({
-      'status': 'cancelled_after_confirm',
+      'status': newStatus,
+      'refund_decision': refundDecision,
       'cancel_reason': fullReason,
       'cancelled_at': FieldValue.serverTimestamp(),
     });
@@ -1236,7 +1417,15 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
       case 'sold_in_showroom_refunded':
         return 'انباعت (استُرجع العربون)';
       case 'cancelled_after_confirm':
-        return 'ملغى بعد القبول';
+        return 'ملغى من المعرض (استرداد 100%)';
+      case 'cancelled_financing_rejected':
+        return 'رفض تمويل (استرداد 100%)';
+      case 'pending_admin_forfeit_review':
+        return 'بانتظار اعتماد الإدارة (70% / 30%)';
+      case 'cancelled_forfeited_70_30':
+        return 'معتمد: 70% معرض · 30% منصة';
+      case 'cancelled_refunded_100':
+        return 'استرداد 100% للمشتري';
       case 'cancelled_by_buyer':
       case 'cancelled_by_buyer_after_inspection':
         return 'ملغى من المشتري';
@@ -1476,6 +1665,33 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                               },
                               child: const Text('إصدار فاتورة المبايعة (بالآيبان المسجل)'),
                             ),
+                          if (isAdmin && status == 'pending_admin_forfeit_review') ...[
+                            FilledButton(
+                              style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
+                              onPressed: () async {
+                                final dep = (d['total_paid'] is num) ? (d['total_paid'] as num).toDouble() : 300.0;
+                                final srShare = double.parse((dep * 0.70).toStringAsFixed(2));
+                                final platShare = double.parse((dep - srShare).toStringAsFixed(2));
+                                await doc.reference.update({
+                                  'status': 'cancelled_forfeited_70_30',
+                                  'refund_decision': 'forfeited_70_30',
+                                  'showroom_forfeit_share': srShare,
+                                  'platform_forfeit_share': platShare,
+                                });
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(backgroundColor: LuxuryColors.success, content: Text('تم الاعتماد: $srShare ر.س للمعرض (70%) و $platShare ر.س رسوم خدمة للمنصة (30%).')),
+                                  );
+                                }
+                              },
+                              child: const Text('اعتماد 70% معرض / 30% منصة', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                            ),
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.danger, side: const BorderSide(color: LuxuryColors.danger)),
+                              onPressed: () => doc.reference.update({'status': 'cancelled_refunded_100', 'refund_decision': 'refund_buyer_100'}),
+                              child: const Text('رفض المصادرة (استرداد 100%)', style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
                           if ((isConfirmed || status == 'path_selected') && !isCompleted) ...[
                             FilledButton(
                               style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy),
