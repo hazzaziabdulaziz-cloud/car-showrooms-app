@@ -139,12 +139,14 @@ service cloud.firestore {
         resource.data.inspection_status == 'pending_inspector' ||
         resource.data.shipping_status == 'pending_tow'
       );
-      allow create: if isSignedIn() &&
+      allow create: if isAdmin() || (
+        isSignedIn() &&
         request.resource.data.buyer_uid == request.auth.uid &&
         request.resource.data.status == 'paid_waiting_showroom' &&
         request.resource.data.invoice_issued == false &&
         request.resource.data.total_paid is int &&
-        request.resource.data.total_paid >= 0;
+        request.resource.data.total_paid >= 0
+      );
       allow update: if isAdmin() || (
         isSignedIn() &&
         (

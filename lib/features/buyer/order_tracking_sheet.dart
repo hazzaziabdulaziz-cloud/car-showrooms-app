@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -44,6 +45,52 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
   bool _saving = false;
   bool _demoShowAllPaths = kDebugMode;
   String? _selectedDeliveryCity;
+  final _pathCouponCtrl = TextEditingController();
+  double _pathDiscount = 0;
+  String? _pathAppliedCoupon;
+  String? _pathCouponMsg;
+  bool _pathCouponValid = false;
+  bool _checkingPathCoupon = false;
+
+  Future<void> _applyPathCoupon(int subtotal, String scope) async {
+    final code = _pathCouponCtrl.text.trim();
+    if (code.isEmpty || subtotal <= 0) return;
+    setState(() { _checkingPathCoupon = true; _pathCouponMsg = null; });
+    try {
+      final res = await AnalyticsAndAccountingService.validateDiscount(
+        code: code,
+        subtotal: subtotal.toDouble(),
+        scope: scope,
+      );
+      if (!mounted) return;
+      final ok = res['valid'] == true;
+      setState(() {
+        _pathCouponValid = ok;
+        _pathCouponMsg = (res['message'] ?? '').toString();
+        _pathDiscount = ok ? (res['discountAmount'] as num).toDouble() : 0;
+        _pathAppliedCoupon = ok ? (res['code'] ?? code.toUpperCase()).toString() : null;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _pathCouponValid = false; _pathDiscount = 0; _pathCouponMsg = 'تعذر التحقق من الكود حالياً.'; });
+    } finally {
+      if (mounted) setState(() => _checkingPathCoupon = false);
+    }
+  }
+
+  Future<void> _openShowroomWhatsApp(String showroomId, String orderCode, String carTitle) async {
+    String phone = '';
+    if (showroomId.isNotEmpty) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('showrooms').doc(showroomId).get();
+        phone = (doc.data()?['contact_phone'] ?? '').toString();
+      } catch (_) {}
+    }
+    final digits = InputSanitizer.cleanSaudiPhone(phone);
+    final intl = digits.startsWith('05') ? '966${digits.substring(1)}' : digits;
+    final text = Uri.encodeComponent('السلام عليكم، بخصوص الحجز رقم $orderCode للسيارة $carTitle عبر تطبيق معرضي.');
+    final uri = Uri.parse(intl.isNotEmpty ? 'https://wa.me/$intl?text=$text' : 'https://wa.me/?text=$text');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 
   static const _deliveryCities = [
     'الرياض', 'الدمام', 'الخبر', 'الظهران', 'الأحساء', 'الجبيل', 'حفر الباطن',
@@ -106,6 +153,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
   void dispose() {
     _codeCtrl.dispose();
     _phoneLast4Ctrl.dispose();
+    _pathCouponCtrl.dispose();
     super.dispose();
   }
 
@@ -114,7 +162,8 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
     try {
       final needsInsp = path['needs_inspection'] == true;
       final needsShip = path['needs_shipping'] == true;
-      final extraFee = (needsInsp ? PricingRules.inspectionTotal : 0) + (needsShip ? dynamicShippingFee : 0);
+      final rawExtraFee = (needsInsp ? PricingRules.inspectionTotal : 0) + (needsShip ? dynamicShippingFee : 0);
+      final extraFee = (rawExtraFee - _pathDiscount).clamp(0, rawExtraFee.toDouble()).round();
 
       await ref.update({
         'post_confirm_path': path['id'],
@@ -144,6 +193,8 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
             customerUid: uid,
             serviceType: 'inspection',
             subtotal: PricingRules.inspectionTotal.toDouble(),
+            discountAmount: (!needsShip ? _pathDiscount : 0),
+            discountCode: (!needsShip ? _pathAppliedCoupon : null),
             notes: 'فحص فني شامل - ${orderData['order_code'] ?? ''}',
           );
         } catch (_) {}
@@ -157,6 +208,8 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
             customerUid: uid,
             serviceType: 'flatbed',
             subtotal: dynamicShippingFee.toDouble(),
+            discountAmount: (needsShip ? _pathDiscount : 0),
+            discountCode: (needsShip ? _pathAppliedCoupon : null),
             notes: 'شحن سطحة إلى ${_selectedDeliveryCity ?? 'الرياض'} - ${orderData['order_code'] ?? ''}',
           );
         } catch (_) {}
@@ -293,6 +346,41 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                     ),
                   );
                 }),
+                if (_selectedPath != null && _selectedPath != 'direct_pickup') ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _pathCouponCtrl,
+                          decoration: luxuryInput('كود خصم للفحص أو السطحة (مثال: VIP20)', icon: Icons.local_offer_outlined),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        height: 50,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
+                          onPressed: _checkingPathCoupon
+                              ? null
+                              : () {
+                                  final sel = availablePaths.firstWhere((e) => e['id'] == _selectedPath);
+                                  final ni = sel['needs_inspection'] == true;
+                                  final ns = sel['needs_shipping'] == true;
+                                  final sub = (ni ? PricingRules.inspectionTotal : 0) + (ns ? dynamicShip : 0);
+                                  final sc = ni && !ns ? 'inspection' : (!ni && ns ? 'flatbed' : 'all');
+                                  _applyPathCoupon(sub, sc);
+                                },
+                          child: Text(_checkingPathCoupon ? '...' : 'تطبيق', style: const TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_pathCouponMsg != null) ...[
+                    const SizedBox(height: 4),
+                    Text(_pathCouponMsg!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _pathCouponValid ? LuxuryColors.success : LuxuryColors.danger)),
+                  ],
+                ],
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -570,6 +658,26 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                           Text('المبلغ المتبقي بعد خصم العربون: ${data['remaining_amount'] ?? '---'} ر.س', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                           Text('الحساب البنكي الرسمي للمعرض: ${data['showroom_bank'] ?? 'المسجل بالتطبيق'} · ${data['showroom_iban'] ?? '---'}', style: const TextStyle(fontSize: 12, color: LuxuryColors.navy)),
                         ],
+                      ),
+                    ),
+                  ],
+                  if (status == 'confirmed' || status == 'path_selected' || status == 'completed') ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: LuxuryColors.success,
+                          side: const BorderSide(color: LuxuryColors.success),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () => _openShowroomWhatsApp(
+                          (data['showroom_id'] ?? '').toString(),
+                          (data['order_code'] ?? '').toString(),
+                          (data['car_title'] ?? '').toString(),
+                        ),
+                        icon: const Icon(Icons.chat_outlined, size: 18),
+                        label: const Text('تواصل واتساب مباشر مع المعرض (مفتوح بعد التأكيد ✓)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
                       ),
                     ),
                   ],

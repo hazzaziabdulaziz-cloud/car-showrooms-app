@@ -751,7 +751,7 @@ class CarDetailsScreen extends StatelessWidget {
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
         actions: [
           IconButton(
-            tooltip: 'مشاركة عبر واتساب',
+            tooltip: 'مشاركة رابط السيارة',
             icon: const Icon(Icons.share_outlined, color: LuxuryColors.gold),
             onPressed: () => _shareOnWhatsApp(title, price, srName, carId),
           ),
@@ -831,47 +831,28 @@ class CarDetailsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 54,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: LuxuryColors.navy,
-                          foregroundColor: LuxuryColors.gold,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onPressed: () => BuyerVerificationSheet.show(
-                          context,
-                          carId: carId,
-                          carTitle: title,
-                          carPrice: price,
-                          showroomId: srId,
-                          showroomName: srName,
-                          showroomOwnerUid: ownerUid,
-                          regionId: regionId,
-                        ),
-                        icon: const Icon(Icons.lock_outline),
-                        label: Text('احجز السيارة الآن ($fee ر.س)', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                      ),
-                    ),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: LuxuryColors.navy,
+                    foregroundColor: LuxuryColors.gold,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 54,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: LuxuryColors.success,
-                        side: const BorderSide(color: LuxuryColors.success),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      onPressed: () => _shareOnWhatsApp(title, price, srName, carId),
-                      icon: const Icon(Icons.chat_outlined, size: 18),
-                      label: const Text('واتساب', style: TextStyle(fontWeight: FontWeight.w800)),
-                    ),
+                  onPressed: () => BuyerVerificationSheet.show(
+                    context,
+                    carId: carId,
+                    carTitle: title,
+                    carPrice: price,
+                    showroomId: srId,
+                    showroomName: srName,
+                    showroomOwnerUid: ownerUid,
+                    regionId: regionId,
                   ),
-                ],
+                  icon: const Icon(Icons.lock_outline),
+                  label: Text('احجز السيارة الآن (عربون ضمان $fee ر.س)', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                ),
               ),
             ],
           ),

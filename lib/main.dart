@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:material_ui/material_ui.dart';
 import 'core/analytics_and_accounting_service.dart';
 import 'core/app_error_shield.dart';
 import 'core/luxury_theme.dart';
@@ -55,7 +55,7 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
 
   Widget _buildNavSwitcher() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: LuxuryColors.navyLight,
@@ -65,9 +65,9 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _navTabItem(index: 0, label: 'المناطق والمعارض'),
+          _navTabItem(index: 0, label: 'المعارض'),
           const SizedBox(width: 4),
-          _navTabItem(index: 1, label: 'بوابة الشركاء'),
+          _navTabItem(index: 1, label: 'الشركاء'),
         ],
       ),
     );
@@ -79,7 +79,7 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
       borderRadius: BorderRadius.circular(8),
       onTap: () => setState(() => _currentTab = index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected ? LuxuryColors.gold : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -89,7 +89,7 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
           maxLines: 1,
           softWrap: false,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 12.5,
             fontWeight: FontWeight.w800,
             color: isSelected ? LuxuryColors.navy : Colors.white,
           ),
@@ -142,17 +142,16 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
       home: Builder(
         builder: (homeCtx) => Scaffold(
           appBar: AppBar(
-            title: const Text('معرضي', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
-            actions: [
-              _buildNavSwitcher(),
-              IconButton(
-                tooltip: 'الشروط وسياسة الخصوصية (PDPL)',
-                icon: const Icon(Icons.policy_outlined, color: LuxuryColors.gold),
-                onPressed: () => Navigator.of(homeCtx).push(
-                  MaterialPageRoute(builder: (_) => const LegalAndPrivacyScreen()),
-                ),
+            centerTitle: true,
+            leading: IconButton(
+              tooltip: 'الشروط وسياسة الخصوصية (PDPL)',
+              icon: const Icon(Icons.policy_outlined, color: LuxuryColors.gold),
+              onPressed: () => Navigator.of(homeCtx).push(
+                MaterialPageRoute(builder: (_) => const LegalAndPrivacyScreen()),
               ),
-            ],
+            ),
+            title: const Text('معرضي', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
+            actions: [_buildNavSwitcher()],
           ),
           body: _currentTab == 0
               ? RegionsHomeScreen(

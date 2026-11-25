@@ -1,3 +1,5 @@
+import '../../core/analytics_and_accounting_service.dart';
+import '../../core/showcase_seeder.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -444,10 +446,22 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                       ],
                     ],
                   ),
-                  TextButton.icon(
-                    onPressed: () => FirebaseAuth.instance.signOut(),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      if (isAdmin)
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
+                          onPressed: () => ShowcaseSeeder.seedAll(context),
+                          icon: const Icon(Icons.auto_awesome, size: 15, color: LuxuryColors.gold),
+                          label: const Text('تعبئة بيانات العرض', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                        ),
+                      TextButton.icon(
+                        onPressed: () => FirebaseAuth.instance.signOut(),
                     icon: const Icon(Icons.logout, size: 16, color: LuxuryColors.danger),
-                    label: const Text('تسجيل الخروج', style: TextStyle(color: LuxuryColors.danger)),
+                        label: const Text('تسجيل الخروج', style: TextStyle(color: LuxuryColors.danger)),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -491,9 +505,9 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                       },
                     )
             else if (_roleTab == 10 && isAdmin)
-              const SizedBox(height: 620, child: AdminFinanceAndAnalyticsTab())
+              const AdminFinanceAndAnalyticsTab()
             else if (_roleTab == 9 && isAdmin)
-              const SizedBox(height: 600, child: AdminDisputeCenterTab())
+              const AdminDisputeCenterTab()
             else if (_roleTab == 2 && isAdmin)
               StreamBuilder<List<ShowroomModel>>(
                 stream: widget.repository.watchShowrooms(),
@@ -1055,6 +1069,182 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
     );
   }
 
+  Future<void> _openSubscriptionDialog() async {
+    int selectedPlan = 499;
+    final couponCtrl = TextEditingController();
+    double discount = 0;
+    String? appliedCode;
+    String? msg;
+    bool valid = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final finalPrice = (selectedPlan - discount).clamp(0, selectedPlan.toDouble());
+          return AlertDialog(
+            title: const Text('تفعيل / تجديد اشتراك المعرض'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ChoiceChip(
+                    label: const Text('الباقة الأساسية — 499 ر.س / شهرياً (حتى 25 سيارة)'),
+                    selected: selectedPlan == 499,
+                    onSelected: (_) => setS(() { selectedPlan = 499; discount = 0; appliedCode = null; msg = null; }),
+                  ),
+                  const SizedBox(height: 8),
+                  ChoiceChip(
+                    label: const Text('الباقة الاحترافية — 999 ر.س / شهرياً (غير محدود + تثبيت)'),
+                    selected: selectedPlan == 999,
+                    onSelected: (_) => setS(() { selectedPlan = 999; discount = 0; appliedCode = null; msg = null; }),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: couponCtrl, decoration: luxuryInput('كود خصم الاشتراك'))),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () async {
+                          final res = await AnalyticsAndAccountingService.validateDiscount(
+                            code: couponCtrl.text.trim(),
+                            subtotal: selectedPlan.toDouble(),
+                            scope: 'subscription',
+                          );
+                          setS(() {
+                            valid = res['valid'] == true;
+                            msg = (res['message'] ?? '').toString();
+                            discount = valid ? (res['discountAmount'] as num).toDouble() : 0;
+                            appliedCode = valid ? (res['code'] ?? '').toString() : null;
+                          });
+                        },
+                        child: const Text('تطبيق'),
+                      ),
+                    ],
+                  ),
+                  if (msg != null) ...[
+                    const SizedBox(height: 6),
+                    Text(msg!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: valid ? LuxuryColors.success : LuxuryColors.danger)),
+                  ],
+                  const SizedBox(height: 10),
+                  Text('المطلوب بعد الخصم: ${finalPrice.toStringAsFixed(0)} ر.س', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
+                onPressed: () async {
+                  final u = FirebaseAuth.instance.currentUser;
+                  if (u == null) return;
+                  Navigator.pop(ctx);
+                  await AnalyticsAndAccountingService.issueInvoiceAndRecordLedger(
+                    orderId: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
+                    customerName: u.email ?? 'معرض',
+                    customerUid: u.uid,
+                    serviceType: 'subscription',
+                    subtotal: selectedPlan.toDouble(),
+                    discountAmount: discount,
+                    discountCode: appliedCode,
+                    notes: selectedPlan == 999 ? 'اشتراك الباقة الاحترافية' : 'اشتراك الباقة الأساسية',
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(backgroundColor: LuxuryColors.success, content: Text('تم تفعيل الباقة وإصدار فاتورة الاشتراك بنجاح ✓')),
+                    );
+                  }
+                },
+                child: const Text('اعتماد الاشتراك'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _cancelOrderAfterAccept(DocumentReference ref, Map d) async {
+    String reason = 'اعتذار من المعرض / عدم توفر السيارة (استرداد العربون 100%)';
+    final noteCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('إلغاء الحجز بعد القبول'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: reason,
+                isExpanded: true,
+                decoration: luxuryInput('سبب الإلغاء'),
+                items: const [
+                  DropdownMenuItem(value: 'اعتذار من المعرض / عدم توفر السيارة (استرداد العربون 100%)', child: Text('اعتذار من المعرض (استرداد العربون 100%)')),
+                  DropdownMenuItem(value: 'رفض التمويل البنكي أو عدم استكمال الإجراءات', child: Text('رفض التمويل البنكي أو عدم استكمال الإجراءات')),
+                  DropdownMenuItem(value: 'تراجع المشتري بعد التأكيد (وفق سياسة العربون)', child: Text('تراجع المشتري بعد التأكيد')),
+                ],
+                onChanged: (v) { if (v != null) setS(() => reason = v); },
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: noteCtrl, decoration: luxuryInput('تفاصيل إضافية (اختياري)')),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('تراجع')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: LuxuryColors.danger, foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تأكيد الإلغاء'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final fullReason = noteCtrl.text.trim().isEmpty ? reason : '$reason — ${noteCtrl.text.trim()}';
+    await ref.update({
+      'status': 'cancelled_after_confirm',
+      'cancel_reason': fullReason,
+      'cancelled_at': FieldValue.serverTimestamp(),
+    });
+    final carId = (d['car_id'] ?? '').toString();
+    if (carId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('cars').doc(carId).update({'status': 'available'});
+      } catch (_) {}
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: LuxuryColors.danger, content: Text('تم إلغاء الحجز وتوثيق السبب وإعادة السيارة للإتاحة.')),
+      );
+    }
+  }
+
+  String _inboxStatusLabel(String status) {
+    switch (status) {
+      case 'paid_waiting_showroom':
+      case 'pending_showroom':
+        return 'بانتظار رد المعرض (ساعتين)';
+      case 'confirmed':
+        return 'تم تأكيد التوفر ✓';
+      case 'path_selected':
+        return 'جاري الفحص / الشحن';
+      case 'completed':
+        return 'مكتمل (تم التسليم)';
+      case 'sold_in_showroom_refunded':
+        return 'انباعت (استُرجع العربون)';
+      case 'cancelled_after_confirm':
+        return 'ملغى بعد القبول';
+      case 'cancelled_by_buyer':
+      case 'cancelled_by_buyer_after_inspection':
+        return 'ملغى من المشتري';
+      default:
+        return status;
+    }
+  }
+
   Widget _buildSubscriptionAndPolicyBanner() {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1064,20 +1254,30 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: LuxuryColors.gold.withValues(alpha: 0.5)),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.workspace_premium, color: LuxuryColors.gold, size: 20),
-              SizedBox(width: 8),
-              Text('باقة اشتراك المعرض وسياسة الأولوية', style: TextStyle(color: LuxuryColors.gold, fontWeight: FontWeight.w800, fontSize: 14)),
+              const Row(
+                children: [
+                  Icon(Icons.workspace_premium, color: LuxuryColors.gold, size: 20),
+                  SizedBox(width: 8),
+                  Text('باقة اشتراك المعرض وسياسة الأولوية', style: TextStyle(color: LuxuryColors.gold, fontWeight: FontWeight.w800, fontSize: 14)),
+                ],
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
+                onPressed: _openSubscriptionDialog,
+                child: const Text('تفعيل / كوبون اشتراك', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+              ),
             ],
           ),
-          SizedBox(height: 6),
-          Text('• الباقة الأساسية: 499 ر.س/شهرياً (حتى 25 سيارة) · الاحترافية: 999 ر.س/شهرياً (غير محدود + تثبيت).', style: TextStyle(color: Colors.white, fontSize: 12)),
-          SizedBox(height: 4),
-          Text('• تنبيه مهم: يرجى تحديث مخزون سياراتك أولاً بأول؛ لأن كثرة رفض الطلبات أو التأخر عن مهلة الساعتين يخفض ترتيب ظهور معرضك أمام العملاء.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+          const SizedBox(height: 6),
+          const Text('• الباقة الأساسية: 499 ر.س/شهرياً (حتى 25 سيارة) · الاحترافية: 999 ر.س/شهرياً (غير محدود + تثبيت).', style: TextStyle(color: Colors.white, fontSize: 12)),
+          const SizedBox(height: 4),
+          const Text('• تنبيه مهم: يرجى تحديث مخزون سياراتك أولاً بأول؛ لأن كثرة رفض الطلبات أو التأخر عن مهلة الساعتين يخفض ترتيب ظهور معرضك أمام العملاء.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
         ],
       ),
     );
@@ -1206,19 +1406,18 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('${d['order_code'] ?? ''} · ${d['car_title'] ?? ''}', style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                          Expanded(
+                            child: Text('${d['order_code'] ?? ''} · ${d['car_title'] ?? ''}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                          ),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: isCompleted ? LuxuryColors.successBg : (isConfirmed ? LuxuryColors.goldSoft : const Color(0xFFFEF3F2)),
+                              color: isCompleted ? LuxuryColors.successBg : (isConfirmed || status == 'path_selected' ? LuxuryColors.goldSoft : const Color(0xFFFEF3F2)),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              isCompleted
-                                  ? 'مكتمل (تم التسليم)'
-                                  : (status == 'sold_in_showroom_refunded'
-                                      ? 'انباعت في الصالة (استُرجع العربون)'
-                                      : (isConfirmed ? 'تم تأكيد التوفر' : 'بانتظار رد المعرض (مهلة ساعتين)')),
+                              _inboxStatusLabel(status),
                               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: isCompleted ? LuxuryColors.success : LuxuryColors.navy),
                             ),
                           ),
@@ -1277,12 +1476,19 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                               },
                               child: const Text('إصدار فاتورة المبايعة (بالآيبان المسجل)'),
                             ),
-                          if ((isConfirmed || status == 'path_selected') && !isCompleted)
+                          if ((isConfirmed || status == 'path_selected') && !isCompleted) ...[
                             FilledButton(
                               style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy),
                               onPressed: () => _promptPinAndComplete(doc.reference, (d['handover_pin'] ?? '').toString()),
                               child: const Text('إدخال كود التسليم وإغلاق الصفقة', style: TextStyle(fontWeight: FontWeight.w800)),
                             ),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.danger, side: const BorderSide(color: LuxuryColors.danger)),
+                              onPressed: () => _cancelOrderAfterAccept(doc.reference, d),
+                              icon: const Icon(Icons.cancel_outlined, size: 16),
+                              label: const Text('إلغاء / اعتذار بعد القبول'),
+                            ),
+                          ],
                         ],
                       ),
                     ],

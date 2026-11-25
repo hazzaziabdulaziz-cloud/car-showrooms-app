@@ -2,54 +2,64 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
 import '../../core/analytics_and_accounting_service.dart';
 import '../../core/app_error_shield.dart';
+import '../../core/luxury_theme.dart';
 
-/// لوحة الأدمن الشاملة: الإحصائيات + سيستم الحسابات والفواتير + الخصومات + سجل الأخطاء
-class AdminFinanceAndAnalyticsTab extends StatelessWidget {
+/// لوحة الأدمن الشاملة بدون تمرير مزدوج (تمرير واحد سلس مع الصفحة)
+class AdminFinanceAndAnalyticsTab extends StatefulWidget {
   const AdminFinanceAndAnalyticsTab({super.key});
 
   @override
+  State<AdminFinanceAndAnalyticsTab> createState() => _AdminFinanceAndAnalyticsTabState();
+}
+
+class _AdminFinanceAndAnalyticsTabState extends State<AdminFinanceAndAnalyticsTab> {
+  int _tab = 0;
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      child: Column(
-        children: const [
-          TabBar(
-            isScrollable: true,
-            labelStyle: TextStyle(fontWeight: FontWeight.w800),
-            tabs: [
-              Tab(icon: Icon(Icons.bar_chart), text: 'الإحصائيات'),
-              Tab(icon: Icon(Icons.account_balance_wallet), text: 'الحسابات والفواتير'),
-              Tab(icon: Icon(Icons.local_offer), text: 'الخصومات'),
-              Tab(icon: Icon(Icons.shield_outlined), text: 'سجل الأخطاء'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _AnalyticsSubTab(),
-                _AccountingSubTab(),
-                _DiscountsSubTab(),
-                _ErrorLogsSubTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
+    final tabs = [
+      (0, 'الإحصائيات', Icons.bar_chart),
+      (1, 'الحسابات والفواتير', Icons.account_balance_wallet),
+      (2, 'الخصومات', Icons.local_offer),
+      (3, 'سجل الأخطاء', Icons.shield_outlined),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: tabs.map((t) {
+            final active = _tab == t.$1;
+            return ChoiceChip(
+              avatar: Icon(t.$3, size: 16, color: active ? LuxuryColors.gold : LuxuryColors.navy),
+              label: Text(t.$2),
+              selected: active,
+              selectedColor: LuxuryColors.navy,
+              backgroundColor: LuxuryColors.surface,
+              labelStyle: TextStyle(color: active ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 12.5),
+              onSelected: (_) => setState(() => _tab = t.$1),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 16),
+        if (_tab == 0) const _AnalyticsSubTab(),
+        if (_tab == 1) const _AccountingSubTab(),
+        if (_tab == 2) const _DiscountsSubTab(),
+        if (_tab == 3) const _ErrorLogsSubTab(),
+      ],
     );
   }
 }
 
-// ==================== 1. تبويب الإحصائيات ====================
 class _AnalyticsSubTab extends StatelessWidget {
   const _AnalyticsSubTab();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
-      stream: FirebaseFirestore.instance
-          .collection('analytics_summary')
-          .doc('global')
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('analytics_summary').doc('global').snapshots(),
       builder: (context, snap) {
         final data = snap.data?.data() ?? <String, dynamic>{};
         int val(String k) => (data[k] as num?)?.toInt() ?? 0;
@@ -64,37 +74,32 @@ class _AnalyticsSubTab extends StatelessWidget {
         ];
 
         return GridView.builder(
-          padding: const EdgeInsets.all(12),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            childAspectRatio: 1.45,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
+            childAspectRatio: 1.75,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
           ),
           itemCount: cards.length,
           itemBuilder: (_, i) {
             final (title, count, icon, color) = cards[i];
-            return Card(
-              elevation: 1,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon, color: color, size: 26),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$count',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color),
-                    ),
-                    Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: LuxuryColors.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: LuxuryColors.border),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: color, size: 26),
+                  const SizedBox(height: 6),
+                  Text('$count', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color)),
+                  Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                ],
               ),
             );
           },
@@ -104,47 +109,63 @@ class _AnalyticsSubTab extends StatelessWidget {
   }
 }
 
-// ==================== 2. تبويب الحسابات والفواتير ====================
 class _AccountingSubTab extends StatelessWidget {
   const _AccountingSubTab();
+
+  String _categoryArabic(String cat) {
+    switch (cat) {
+      case 'car_booking':
+        return 'عربون سيارة (أمانة للمعرض)';
+      case 'inspection':
+        return 'فحص شامل (20% إيراد منصة · 80% أمانة فاحص)';
+      case 'flatbed':
+        return 'شحن سطحة (10% إيراد منصة · 90% أمانة سطحة)';
+      case 'subscription':
+        return 'اشتراك معرض (إيراد منصة 100%)';
+      case 'partner_payout':
+        return 'تحويل مستحقات شريك (فاحص / سطحة / معرض)';
+      case 'refund':
+        return 'استرداد مبلغ لعميل';
+      case 'expense':
+        return 'مصروف تشغيلي للمنصة';
+      default:
+        return cat;
+    }
+  }
 
   void _showOutgoingDialog(BuildContext context) {
     final amountCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    String category = 'refund';
+    String category = 'partner_payout';
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('تسجيل مبلغ طالع (مصروف / استرجاع)'),
+          title: const Text('تسجيل قيد طالع (تحويل / استرجاع / مصروف)'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
                 initialValue: category,
-                decoration: const InputDecoration(labelText: 'النوع'),
+                decoration: luxuryInput('النوع'),
                 items: const [
-                  DropdownMenuItem(value: 'refund', child: Text('استرجاع لعميل')),
-                  DropdownMenuItem(value: 'partner_payout', child: Text('تحويل مستحقات معرض/شريك')),
-                  DropdownMenuItem(value: 'expense', child: Text('مصروف تشغيلي')),
+                  DropdownMenuItem(value: 'partner_payout', child: Text('تحويل مستحقات شريك (من الأمانات)')),
+                  DropdownMenuItem(value: 'refund', child: Text('استرجاع لعميل (من الأمانات)')),
+                  DropdownMenuItem(value: 'expense', child: Text('مصروف تشغيلي (يخصم من إيراد المنصة)')),
                 ],
-                onChanged: (v) => setSt(() => category = v ?? 'refund'),
+                onChanged: (v) => setSt(() => category = v ?? 'partner_payout'),
               ),
-              TextField(
-                controller: amountCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'المبلغ (ريال)'),
-              ),
-              TextField(
-                controller: descCtrl,
-                decoration: const InputDecoration(labelText: 'البيان / الوصف'),
-              ),
+              const SizedBox(height: 10),
+              TextField(controller: amountCtrl, keyboardType: TextInputType.number, decoration: luxuryInput('المبلغ (ريال)')),
+              const SizedBox(height: 10),
+              TextField(controller: descCtrl, decoration: luxuryInput('البيان / الوصف')),
             ],
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
               onPressed: () async {
                 final amt = double.tryParse(amountCtrl.text.trim()) ?? 0;
                 if (amt <= 0) return;
@@ -168,82 +189,107 @@ class _AccountingSubTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
-      stream: FirebaseFirestore.instance
-          .collection('ledger_entries')
-          .orderBy('createdAt', descending: true)
-          .limit(100)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('ledger_entries').orderBy('createdAt', descending: true).limit(100).snapshots(),
       builder: (context, snap) {
         final docs = snap.data?.docs ?? [];
-        double totalIn = 0;
-        double totalOut = 0;
+        double platformRevenue = 0;
+        double escrowBalance = 0;
+        double totalGmv = 0;
+
         for (final d in docs) {
           final m = d.data();
           final amt = (m['amount'] as num?)?.toDouble() ?? 0;
-          if (m['direction'] == 'in') {
-            totalIn += amt;
+          final dir = (m['direction'] ?? 'in').toString();
+          final cat = (m['category'] ?? '').toString();
+
+          if (dir == 'in') {
+            totalGmv += amt;
+            if (cat == 'subscription') {
+              platformRevenue += amt;
+            } else if (cat == 'inspection') {
+              platformRevenue += amt * 0.20;
+              escrowBalance += amt * 0.80;
+            } else if (cat == 'flatbed') {
+              platformRevenue += amt * 0.10;
+              escrowBalance += amt * 0.90;
+            } else {
+              // عربون سيارة يُحفظ كأمانة للمعرض
+              escrowBalance += amt;
+            }
           } else {
-            totalOut += amt;
+            if (cat == 'expense') {
+              platformRevenue -= amt;
+            } else {
+              // تحويل مستحقات شريك أو استرجاع عميل يُخصم من الأمانات
+              escrowBalance -= amt;
+            }
           }
         }
-        final net = totalIn - totalOut;
 
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
-                  _miniStat('الداخل', '${totalIn.toStringAsFixed(0)} ر.س', Colors.green),
-                  const SizedBox(width: 8),
-                  _miniStat('الطالع', '${totalOut.toStringAsFixed(0)} ر.س', Colors.red),
-                  const SizedBox(width: 8),
-                  _miniStat('الصافي', '${net.toStringAsFixed(0)} ر.س', Colors.indigo),
-                ],
-              ),
+            Row(
+              children: [
+                _miniStat('صافي إيراد المنصة', '${platformRevenue.toStringAsFixed(0)} ر.س', LuxuryColors.success),
+                const SizedBox(width: 8),
+                _miniStat('أمانات ومستحقات الشركاء', '${escrowBalance.toStringAsFixed(0)} ر.س', LuxuryColors.navy),
+                const SizedBox(width: 8),
+                _miniStat('إجمالي التدفق (GMV)', '${totalGmv.toStringAsFixed(0)} ر.س', Colors.indigo),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => _showOutgoingDialog(context),
-                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                  label: const Text('تسجيل قيد طالع (استرجاع / تحويل / مصروف)'),
-                ),
-              ),
+            const SizedBox(height: 6),
+            const Text(
+              'ملاحظة محاسبية: 90% من السطحة و80% من الفحص وعربون السيارة تُقيّد كأمانات للشركاء ولا تُحسب إيراداً للمنصة.',
+              style: TextStyle(fontSize: 11.5, color: LuxuryColors.textSecondary),
             ),
-            const Divider(),
-            Expanded(
-              child: docs.isEmpty
-                  ? const Center(child: Text('لا توجد قيود مالية مسجلة بعد.'))
-                  : ListView.builder(
-                      itemCount: docs.length,
-                      itemBuilder: (_, i) {
-                        final m = docs[i].data();
-                        final isIn = m['direction'] == 'in';
-                        final amt = (m['amount'] as num?)?.toDouble() ?? 0;
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isIn ? Colors.green.shade50 : Colors.red.shade50,
-                            child: Icon(
-                              isIn ? Icons.arrow_downward : Icons.arrow_upward,
-                              color: isIn ? Colors.green : Colors.red,
-                            ),
-                          ),
-                          title: Text(m['description']?.toString() ?? 'قيد مالي'),
-                          subtitle: Text('التصنيف: ${m['category'] ?? '-'}'),
-                          trailing: Text(
-                            '${isIn ? '+' : '-'}${amt.toStringAsFixed(2)} ر.س',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: isIn ? Colors.green : Colors.red,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _showOutgoingDialog(context),
+              icon: const Icon(Icons.remove_circle_outline, color: LuxuryColors.danger),
+              label: const Text('تسجيل قيد طالع (تحويل شريك / استرجاع / مصروف)'),
             ),
+            const Divider(height: 24),
+            if (docs.isEmpty)
+              const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('لا توجد قيود مالية مسجلة بعد.')))
+            else
+              ...docs.map((doc) {
+                final m = doc.data();
+                final isIn = m['direction'] == 'in';
+                final amt = (m['amount'] as num?)?.toDouble() ?? 0;
+                final cat = (m['category'] ?? '').toString();
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: LuxuryColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: LuxuryColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: isIn ? LuxuryColors.successBg : const Color(0xFFFEF3F2),
+                        child: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward, color: isIn ? LuxuryColors.success : LuxuryColors.danger, size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(m['description']?.toString() ?? 'قيد مالي', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                            Text(_categoryArabic(cat), style: const TextStyle(fontSize: 11.5, color: LuxuryColors.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${isIn ? '+' : '-'}${amt.toStringAsFixed(2)} ر.س',
+                        style: TextStyle(fontWeight: FontWeight.w800, color: isIn ? LuxuryColors.success : LuxuryColors.danger),
+                      ),
+                    ],
+                  ),
+                );
+              }),
           ],
         );
       },
@@ -253,17 +299,17 @@ class _AccountingSubTab extends StatelessWidget {
   Widget _miniStat(String label, String value, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          color: LuxuryColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
         ),
         child: Column(
           children: [
-            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color)),
+            Text(value, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: color)),
           ],
         ),
       ),
@@ -271,7 +317,6 @@ class _AccountingSubTab extends StatelessWidget {
   }
 }
 
-// ==================== 3. تبويب الخصومات والكوبونات ====================
 class _DiscountsSubTab extends StatelessWidget {
   const _DiscountsSubTab();
 
@@ -291,27 +336,23 @@ class _DiscountsSubTab extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: codeCtrl,
-                  decoration: const InputDecoration(labelText: 'الكود (مثال: VIP20)'),
-                ),
+                TextField(controller: codeCtrl, decoration: luxuryInput('الكود (مثال: VIP20)')),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: type,
-                  decoration: const InputDecoration(labelText: 'نوع الخصم'),
+                  decoration: luxuryInput('نوع الخصم'),
                   items: const [
                     DropdownMenuItem(value: 'percent', child: Text('نسبة مئوية (%)')),
                     DropdownMenuItem(value: 'fixed', child: Text('مبلغ ثابت (ريال)')),
                   ],
                   onChanged: (v) => setSt(() => type = v ?? 'percent'),
                 ),
-                TextField(
-                  controller: valCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'قيمة الخصم'),
-                ),
+                const SizedBox(height: 10),
+                TextField(controller: valCtrl, keyboardType: TextInputType.number, decoration: luxuryInput('قيمة الخصم')),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: scope,
-                  decoration: const InputDecoration(labelText: 'نطاق الخدمة'),
+                  decoration: luxuryInput('نطاق الخدمة'),
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('جميع الخدمات')),
                     DropdownMenuItem(value: 'car', child: Text('حجز سيارة')),
@@ -321,17 +362,15 @@ class _DiscountsSubTab extends StatelessWidget {
                   ],
                   onChanged: (v) => setSt(() => scope = v ?? 'all'),
                 ),
-                TextField(
-                  controller: maxCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'الحد الأقصى للاستخدام'),
-                ),
+                const SizedBox(height: 10),
+                TextField(controller: maxCtrl, keyboardType: TextInputType.number, decoration: luxuryInput('الحد الأقصى للاستخدام (0 = مفتوح)')),
               ],
             ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
               onPressed: () async {
                 final code = codeCtrl.text.trim();
                 final val = double.tryParse(valCtrl.text.trim()) ?? 0;
@@ -359,87 +398,84 @@ class _DiscountsSubTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(10),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _showCreateCouponDialog(context),
-              icon: const Icon(Icons.add),
-              label: const Text('إنشاء كود خصم جديد'),
-            ),
-          ),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold, padding: const EdgeInsets.symmetric(vertical: 14)),
+          onPressed: () => _showCreateCouponDialog(context),
+          icon: const Icon(Icons.add),
+          label: const Text('إنشاء كود خصم جديد', style: TextStyle(fontWeight: FontWeight.w800)),
         ),
-        Expanded(
-          child: StreamBuilder(
-            stream: FirebaseFirestore.instance
-                .collection('discount_codes')
-                .orderBy('createdAt', descending: true)
-                .snapshots(),
-            builder: (context, snap) {
-              final docs = snap.data?.docs ?? [];
-              if (docs.isEmpty) {
-                return const Center(child: Text('لا توجد أكواد خصم حالياً.'));
-              }
-              return ListView.builder(
-                itemCount: docs.length,
-                itemBuilder: (_, i) {
-                  final d = docs[i];
-                  final m = d.data();
-                  final active = m['active'] == true;
-                  final label = m['type'] == 'percent'
-                      ? '${m['value']}%'
-                      : '${m['value']} ر.س';
-                  return SwitchListTile(
+        const SizedBox(height: 12),
+        StreamBuilder(
+          stream: FirebaseFirestore.instance.collection('discount_codes').orderBy('createdAt', descending: true).snapshots(),
+          builder: (context, snap) {
+            final docs = snap.data?.docs ?? [];
+            if (docs.isEmpty) return const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('لا توجد أكواد خصم حالياً.')));
+            return Column(
+              children: docs.map((d) {
+                final m = d.data();
+                final active = m['active'] == true;
+                final label = m['type'] == 'percent' ? '${m['value']}%' : '${m['value']} ر.س';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: LuxuryColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: LuxuryColors.border),
+                  ),
+                  child: SwitchListTile(
                     value: active,
-                    title: Text('${m['code']}  ($label)', style: const TextStyle(fontWeight: FontWeight.w800)),
+                    title: Text('${m['code']} ($label)', style: const TextStyle(fontWeight: FontWeight.w800)),
                     subtitle: Text('النطاق: ${m['scope']} • الاستخدام: ${m['usedCount'] ?? 0}/${m['maxUses'] ?? 0}'),
-                    onChanged: (v) {
-                      d.reference.update({'active': v});
-                    },
-                  );
-                },
-              );
-            },
-          ),
+                    onChanged: (v) => d.reference.update({'active': v}),
+                  ),
+                );
+              }).toList(),
+            );
+          },
         ),
       ],
     );
   }
 }
 
-// ==================== 4. تبويب سجل الأخطاء المعزولة ====================
 class _ErrorLogsSubTab extends StatelessWidget {
   const _ErrorLogsSubTab();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
-      stream: FirebaseFirestore.instance
-          .collection('app_error_logs')
-          .orderBy('createdAt', descending: true)
-          .limit(30)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('app_error_logs').orderBy('createdAt', descending: true).limit(30).snapshots(),
       builder: (context, snap) {
         final docs = snap.data?.docs ?? [];
         if (docs.isEmpty) {
-          return const Center(child: Text('لا توجد أخطاء مسجلة — التطبيق يعمل بسلاسة.'));
+          return const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('لا توجد أخطاء مسجلة — التطبيق يعمل بسلاسة.')));
         }
-        return ListView.builder(
-          itemCount: docs.length,
-          itemBuilder: (_, i) {
-            final m = docs[i].data();
-            return ListTile(
-              leading: const Icon(Icons.bug_report_outlined, color: Colors.amber),
-              title: Text(m['source']?.toString() ?? 'App', style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(
-                m['error']?.toString() ?? '',
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+        return Column(
+          children: docs.map((doc) {
+            final m = doc.data();
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: LuxuryColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: LuxuryColors.border)),
+              child: Row(
+                children: [
+                  const Icon(Icons.bug_report_outlined, color: Colors.amber),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(m['source']?.toString() ?? 'App', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(m['error']?.toString() ?? '', maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             );
-          },
+          }).toList(),
         );
       },
     );
