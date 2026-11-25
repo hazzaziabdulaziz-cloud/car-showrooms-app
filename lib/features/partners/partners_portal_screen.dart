@@ -34,6 +34,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   bool _authLoading = false;
   String _signupPartnerType = 'showroom';
   String? _selectedGateway;
+  String? _previewRole;
 
   int _roleTab = 0;
   String? _adminSelectedShowroomId;
@@ -344,6 +345,9 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnap) {
         final user = authSnap.data;
+        if (_previewRole != null) {
+          return _buildPreviewRolePortal(_previewRole!, user);
+        }
         if (user == null) return _buildAuthView();
         return _buildAuthenticatedPortal(user);
       },
@@ -380,14 +384,14 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 id: 'inspector',
                 icon: Icons.fact_check_outlined,
                 title: 'فاحص سيارات معتمد',
-                subtitle: 'استقبل طلبات الفحص الشامل في منطقتك وارفع التقرير الرسمي — حصتك 200 ر.س لكل فحص.',
+                subtitle: 'استقبل طلبات الفحص الشامل في منطقتك وارفع التقارير الرسمية المعتمدة.',
               ),
               const SizedBox(height: 14),
               _gatewayCard(
                 id: 'tow_driver',
                 icon: Icons.local_shipping_outlined,
                 title: 'صاحب سطحة',
-                subtitle: 'حدّد موقعك الحالي واستقبل رحلات الشحن الموثقة — حصتك 80% صافية لكل رحلة.',
+                subtitle: 'حدّد موقعك الحالي واستقبل رحلات الشحن الموثقة بين المدن والمعارض.',
               ),
             ],
           ),
@@ -517,7 +521,120 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: LuxuryColors.gold),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  onPressed: () => setState(() {
+                    _roleTab = 0;
+                    _previewRole = id;
+                  }),
+                  child: const Text('معاينة فورية', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                ),
+                const SizedBox(height: 4),
+                const Text('أو اضغط للتسجيل', style: TextStyle(fontSize: 10.5, color: LuxuryColors.textSecondary)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewRolePortal(String pType, User? user) {
+    final title = pType == 'showroom'
+        ? 'معاينة: لوحة تحكم المعرض'
+        : (pType == 'inspector' ? 'معاينة: لوحة تحكم الفاحص' : 'معاينة: لوحة تحكم صاحب السطحة');
+    final isAdmin = isAdminEmail(user?.email);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780),
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(color: LuxuryColors.navy, borderRadius: BorderRadius.circular(14)),
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
+                      Text(
+                        user == null ? 'وضع معاينة بدون تسجيل (سجّل دخولك كمدير لظهور كل الحجوزات الحية)' : 'وضع معاينة مباشر مع الحجوزات الحية ✓',
+                        style: const TextStyle(fontSize: 11.5, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.gold, side: const BorderSide(color: LuxuryColors.gold)),
+                        onPressed: () => setState(() { _roleTab = 0; _previewRole = 'showroom'; }),
+                        child: const Text('معرض', style: TextStyle(fontSize: 12)),
+                      ),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.gold, side: const BorderSide(color: LuxuryColors.gold)),
+                        onPressed: () => setState(() => _previewRole = 'inspector'),
+                        child: const Text('فاحص', style: TextStyle(fontSize: 12)),
+                      ),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.gold, side: const BorderSide(color: LuxuryColors.gold)),
+                        onPressed: () => setState(() => _previewRole = 'tow_driver'),
+                        child: const Text('سطحة', style: TextStyle(fontSize: 12)),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy),
+                        onPressed: () => setState(() => _previewRole = null),
+                        child: const Text('رجوع', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (pType == 'showroom') ...[
+              Wrap(
+                spacing: 8,
+                children: [
+                  _roleButton(0, 'إدارة معرضي والمخزون'),
+                  _roleButton(3, 'صندوق حجوزات معرضي'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (_roleTab == 3)
+                _buildOrdersInbox(isAdmin || user != null)
+              else
+                StreamBuilder<List<ShowroomModel>>(
+                  stream: widget.repository.watchShowrooms(),
+                  builder: (context, snap) {
+                    final list = snap.data ?? const <ShowroomModel>[];
+                    if (list.isEmpty) return _buildRegisterShowroomCard();
+                    return _buildMyShowroomDashboard(list.first);
+                  },
+                ),
+            ] else if (pType == 'inspector') ...[
+              _buildInspectorTasksList(),
+              const SizedBox(height: 16),
+              _buildInspectorSubmittedReportsList(true),
+              const SizedBox(height: 16),
+              _buildInspectorSection(false),
+            ] else ...[
+              _buildTowLocationSwitchCard(),
+              const SizedBox(height: 14),
+              _buildTowTasksList(),
+              const SizedBox(height: 18),
+              _buildRegisterTowCard(),
+            ],
           ],
         ),
       ),
@@ -623,6 +740,23 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                   Wrap(
                     spacing: 6,
                     children: [
+                      if (isAdmin) ...[
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.navy)),
+                          onPressed: () => setState(() { _roleTab = 0; _previewRole = 'showroom'; }),
+                          child: const Text('معاينة معرض', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
+                        ),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.navy)),
+                          onPressed: () => setState(() => _previewRole = 'inspector'),
+                          child: const Text('معاينة فاحص', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
+                        ),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.navy)),
+                          onPressed: () => setState(() => _previewRole = 'tow_driver'),
+                          child: const Text('معاينة سطحة', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
+                        ),
+                      ],
                       if (isAdmin)
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
