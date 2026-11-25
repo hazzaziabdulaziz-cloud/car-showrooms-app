@@ -76,13 +76,13 @@ class PricingRules {
     return r * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
-  /// حصة المنصة: 10% صافية بدون سقف
+  /// حصة المنصة: 20% صافية
   static int platformTowShare(int shippingTotal) {
     if (shippingTotal <= 0) return 0;
-    return (shippingTotal * 0.10).round();
+    return (shippingTotal * 0.20).round();
   }
 
-  /// حصة صاحب السطحة: 90% صافية
+  /// حصة صاحب السطحة: 80% صافية
   static int driverTowShare(int shippingTotal) {
     if (shippingTotal <= 0) return 0;
     return shippingTotal - platformTowShare(shippingTotal);

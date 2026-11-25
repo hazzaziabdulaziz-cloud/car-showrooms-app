@@ -7,8 +7,8 @@ void main() {
     expect(PricingRules.reservationFee(80000), 150);
     expect(PricingRules.reservationFee(150000), 300);
     expect(PricingRules.reservationFee(300000), 500);
-    expect(PricingRules.platformTowShare(650), 65);
-    expect(PricingRules.driverTowShare(650), 585);
+    expect(PricingRules.platformTowShare(650), 130);
+    expect(PricingRules.driverTowShare(650), 520);
   });
 
   test('IbanValidator MOD-97 catches invalid Saudi IBAN', () {

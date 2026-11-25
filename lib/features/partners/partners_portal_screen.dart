@@ -492,7 +492,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                   ListTile(
                     leading: const Icon(Icons.local_shipping_outlined, color: LuxuryColors.gold),
                     title: const Text('لوحة تحكم كابتن سطحة', style: TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const Text('تحديث موقعك واستقبال رحلات الشحن وتوثيق الـ 4 صور (90%)'),
+                    subtitle: const Text('تحديث موقعك واستقبال رحلات الشحن وتوثيق الـ 4 صور (80%)'),
                     trailing: FilledButton(style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold), onPressed: () => pick('tow_driver'), child: const Text('دخول')),
                   ),
                 ],
@@ -2093,7 +2093,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('رحلات الشحن الواردة (حصة السطحة 90% · حصة معرضي 10%)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              const Text('رحلات الشحن الواردة (حصة السطحة 80% · حصة معرضي 20%)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
               const Divider(height: 18),
               if (docs.isEmpty)
                 const Text('لا توجد رحلات شحن جديدة حالياً.', style: TextStyle(color: LuxuryColors.textSecondary))
@@ -2113,7 +2113,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                             children: [
                               Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                               Text('التحميل من: ${d['showroom_name'] ?? '-'} (${findRegion((d['region_id'] ?? 'riyadh').toString()).nameAr}) ← التسليم إلى: ${d['buyer_city'] ?? '-'}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
-                              Text('المشتري: ${d['buyer_name'] ?? '-'} · حصتك (90%): ${d['tow_driver_share'] ?? 585} ر.س', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
+                              Text('المشتري: ${d['buyer_name'] ?? '-'} · حصتك (80%): ${d['tow_driver_share'] ?? 520} ر.س', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
                             ],
                           ),
                         ),
@@ -2149,7 +2149,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           children: [
             const Text('تسجيل كابتن سطحة', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
             const SizedBox(height: 4),
-            const Text('التسجيل مجاني — عمولة المنصة 10% فقط لكل رحلة.', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
+            const Text('التسجيل مجاني — عمولة المنصة 20% فقط لكل رحلة.', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
             const SizedBox(height: 18),
             Row(
               children: [

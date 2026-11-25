@@ -119,7 +119,7 @@ class _AccountingSubTab extends StatelessWidget {
       case 'inspection':
         return 'فحص شامل (20% إيراد منصة · 80% أمانة فاحص)';
       case 'flatbed':
-        return 'شحن سطحة (10% إيراد منصة · 90% أمانة سطحة)';
+        return 'شحن سطحة (20% إيراد منصة · 80% أمانة سطحة)';
       case 'subscription':
         return 'اشتراك معرض (إيراد منصة 100%)';
       case 'partner_payout':
@@ -210,8 +210,8 @@ class _AccountingSubTab extends StatelessWidget {
               platformRevenue += amt * 0.20;
               escrowBalance += amt * 0.80;
             } else if (cat == 'flatbed') {
-              platformRevenue += amt * 0.10;
-              escrowBalance += amt * 0.90;
+              platformRevenue += amt * 0.20;
+              escrowBalance += amt * 0.80;
             } else {
               // عربون سيارة يُحفظ كأمانة للمعرض
               escrowBalance += amt;
@@ -240,7 +240,7 @@ class _AccountingSubTab extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              'ملاحظة محاسبية: 90% من السطحة و80% من الفحص وعربون السيارة تُقيّد كأمانات للشركاء ولا تُحسب إيراداً للمنصة.',
+              'ملاحظة محاسبية: 80% من السطحة و80% من الفحص وعربون السيارة تُقيّد كأمانات للشركاء ولا تُحسب إيراداً للمنصة.',
               style: TextStyle(fontSize: 11.5, color: LuxuryColors.textSecondary),
             ),
             const SizedBox(height: 12),
