@@ -1,3 +1,4 @@
+import 'admin_finance_and_analytics_tab.dart';
 import 'dispute_and_subscription_manager.dart';
 import 'package:flutter/material.dart';
 import '../../core/luxury_theme.dart';
@@ -373,6 +374,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                   _roleButton(0, isAdmin ? 'تسجيل معرض جديد' : 'إدارة معرضي'),
                   if (isAdmin) _roleButton(2, 'إضافة سيارة (لأي معرض)'),
                   if (isAdmin) _roleButton(9, 'مركز النزاعات'),
+                  if (isAdmin) _roleButton(10, 'المالية والإحصائيات'),
                   _roleButton(3, 'صندوق الحجوزات'),
                   _roleButton(4, 'الفاحص المعتمد (تسجيل وطلبات)'),
                   _roleButton(1, 'حساب كابتن السطحة'),
@@ -397,6 +399,8 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         return _buildMyShowroomDashboard(myShowroom);
                       },
                     )
+            else if (_roleTab == 10 && isAdmin)
+              const SizedBox(height: 620, child: AdminFinanceAndAnalyticsTab())
             else if (_roleTab == 9 && isAdmin)
               SizedBox(height: 600, child: AdminDisputeCenterTab())
             else if (_roleTab == 2 && isAdmin)

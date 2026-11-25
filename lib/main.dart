@@ -1,3 +1,5 @@
+import 'core/analytics_and_accounting_service.dart';
+import 'core/app_error_shield.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +13,8 @@ import 'features/partners/partners_portal_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  AppErrorShield.init();
+  AnalyticsAndAccountingService.trackEvent(AnalyticsAndAccountingService.evAppOpen);
   runApp(const ShowroomPlatformApp());
 }
 
