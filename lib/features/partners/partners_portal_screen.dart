@@ -626,8 +626,6 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
               _buildInspectorTasksList(),
               const SizedBox(height: 16),
               _buildInspectorSubmittedReportsList(true),
-              const SizedBox(height: 16),
-              _buildInspectorSection(false),
             ] else ...[
               _buildTowLocationSwitchCard(),
               const SizedBox(height: 14),
@@ -2079,7 +2077,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('مهام الفحص الواردة (حصة الفاحص: 200 ر.س · حصة معرضي: 50 ر.س)', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              const Text('مهام الفحص الواردة (أتعابك الصافية: 200 ر.س لكل فحص)', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
               const Divider(height: 20),
               if (docs.isEmpty)
                 const Text('لا توجد طلبات فحص بانتظار التقرير حالياً.', style: TextStyle(color: LuxuryColors.textSecondary))
@@ -2366,7 +2364,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('رحلات الشحن الواردة (حصة السطحة 80% · حصة معرضي 20%)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              const Text('رحلات الشحن الواردة', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
               const Divider(height: 18),
               if (docs.isEmpty)
                 const Text('لا توجد رحلات شحن جديدة حالياً.', style: TextStyle(color: LuxuryColors.textSecondary))
@@ -2386,7 +2384,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                             children: [
                               Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                               Text('التحميل من: ${d['showroom_name'] ?? '-'} (${findRegion((d['region_id'] ?? 'riyadh').toString()).nameAr}) ← التسليم إلى: ${d['buyer_city'] ?? '-'}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
-                              Text('المشتري: ${d['buyer_name'] ?? '-'} · حصتك (80%): ${d['tow_driver_share'] ?? 520} ر.س', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
+                              Text('المشتري: ${d['buyer_name'] ?? '-'} · صافي أرباحك: ${d['tow_driver_share'] ?? 520} ر.س', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
                             ],
                           ),
                         ),
@@ -2422,7 +2420,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           children: [
             const Text('تسجيل كابتن سطحة', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
             const SizedBox(height: 4),
-            const Text('التسجيل مجاني — عمولة المنصة 20% فقط لكل رحلة.', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
+            const Text('التسجيل مجاني — استقبل رحلات الشحن الموثقة في منطقتك.', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
             const SizedBox(height: 18),
             Row(
               children: [
