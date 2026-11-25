@@ -33,6 +33,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   bool _isLoginMode = true;
   bool _authLoading = false;
   String _signupPartnerType = 'showroom';
+  String? _selectedGateway;
 
   int _roleTab = 0;
   String? _adminSelectedShowroomId;
@@ -350,6 +351,54 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   }
 
   Widget _buildAuthView() {
+    if (_selectedGateway == null) {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              const Text(
+                'بوابة الشركاء — اختر نوع خدمتك',
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'لكل خدمة بوابة وتسجيل ولوحة تحكم مستقلة بالكامل.',
+                style: TextStyle(fontSize: 13.5, color: LuxuryColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              _gatewayCard(
+                id: 'showroom',
+                icon: Icons.storefront_outlined,
+                title: 'معرض سيارات',
+                subtitle: 'سجّل معرضك بشهادة الآيبان، أضف سياراتك بالصور وملصق QR، وتابع حجوزات المشترين.',
+              ),
+              const SizedBox(height: 14),
+              _gatewayCard(
+                id: 'inspector',
+                icon: Icons.fact_check_outlined,
+                title: 'فاحص سيارات معتمد',
+                subtitle: 'استقبل طلبات الفحص الشامل في منطقتك وارفع التقرير الرسمي — حصتك 200 ر.س لكل فحص.',
+              ),
+              const SizedBox(height: 14),
+              _gatewayCard(
+                id: 'tow_driver',
+                icon: Icons.local_shipping_outlined,
+                title: 'صاحب سطحة',
+                subtitle: 'حدّد موقعك الحالي واستقبل رحلات الشحن الموثقة — حصتك 80% صافية لكل رحلة.',
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final gwTitle = _selectedGateway == 'showroom'
+        ? 'بوابة معارض السيارات'
+        : (_selectedGateway == 'inspector' ? 'بوابة الفاحصين المعتمدين' : 'بوابة أصحاب السطحات');
+
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -357,19 +406,34 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _selectedGateway = null),
+                icon: const Icon(Icons.arrow_back, size: 18, color: LuxuryColors.navy),
+                label: const Text('تغيير نوع الخدمة', style: TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800)),
+              ),
+            ),
+            const SizedBox(height: 8),
             _luxuryCard(
               child: Form(
                 key: _authKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: LuxuryColors.goldSoft, borderRadius: BorderRadius.circular(8)),
+                      child: Text(gwTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                    ),
+                    const SizedBox(height: 10),
                     Text(
-                      _isLoginMode ? 'تسجيل دخول الشركاء' : 'إنشاء حساب شريك جديد',
+                      _isLoginMode ? 'تسجيل الدخول إلى لوحتك' : 'إنشاء حساب جديد واستكمال البيانات',
                       style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'حسابك يضمن خصوصية معرضك وعدم قدرة أي طرف آخر على التعديل أو الإضافة باسمك.',
+                      'بعد الدخول ستنتقل مباشرة لاستكمال بيانات خدمتك وإدارة طلباتك.',
                       style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary),
                     ),
                     const SizedBox(height: 20),
@@ -391,38 +455,6 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                           ? ((v == null || v.isEmpty) ? 'يرجى إدخال كلمة المرور.' : null)
                           : PasswordPolicy.validate(v),
                     ),
-                    if (!_isLoginMode) ...[
-                      const SizedBox(height: 14),
-                      const Text('اختر نوع حسابك (تفتح لك لوحة تحكم مخصصة لخدمتك فقط):', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ChoiceChip(
-                            label: const Text('معرض سيارات'),
-                            selected: _signupPartnerType == 'showroom',
-                            selectedColor: LuxuryColors.navy,
-                            labelStyle: TextStyle(color: _signupPartnerType == 'showroom' ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700),
-                            onSelected: (_) => setState(() => _signupPartnerType = 'showroom'),
-                          ),
-                          ChoiceChip(
-                            label: const Text('فاحص معتمد'),
-                            selected: _signupPartnerType == 'inspector',
-                            selectedColor: LuxuryColors.navy,
-                            labelStyle: TextStyle(color: _signupPartnerType == 'inspector' ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700),
-                            onSelected: (_) => setState(() => _signupPartnerType = 'inspector'),
-                          ),
-                          ChoiceChip(
-                            label: const Text('كابتن سطحة'),
-                            selected: _signupPartnerType == 'tow_driver',
-                            selectedColor: LuxuryColors.navy,
-                            labelStyle: TextStyle(color: _signupPartnerType == 'tow_driver' ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700),
-                            onSelected: (_) => setState(() => _signupPartnerType = 'tow_driver'),
-                          ),
-                        ],
-                      ),
-                    ],
                     const SizedBox(height: 18),
                     SizedBox(
                       width: double.infinity,
@@ -431,7 +463,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
                         onPressed: _authLoading ? null : _handleAuth,
                         child: Text(
-                          _authLoading ? 'جاري التحقق...' : (_isLoginMode ? 'دخول إلى لوحتي' : 'إنشاء الحساب والمتابعة'),
+                          _authLoading ? 'جاري التحقق...' : (_isLoginMode ? 'دخول إلى لوحتي' : 'إنشاء الحساب واستكمال البيانات'),
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -440,13 +472,52 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                     Center(
                       child: TextButton(
                         onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
-                        child: Text(_isLoginMode ? 'ليس لديك حساب شريك؟ أنشئ حساباً جديداً' : 'لديك حساب بالفعل؟ سجّل الدخول'),
+                        child: Text(_isLoginMode ? 'ليس لديك حساب بعد؟ أنشئ حساباً جديداً' : 'لديك حساب بالفعل؟ سجّل الدخول'),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _gatewayCard({
+    required String id,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => setState(() {
+        _selectedGateway = id;
+        _signupPartnerType = id;
+        _isLoginMode = false;
+      }),
+      child: _luxuryCard(
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: LuxuryColors.navy, borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, color: LuxuryColors.gold, size: 28),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary, height: 1.45)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, size: 16, color: LuxuryColors.gold),
           ],
         ),
       ),
