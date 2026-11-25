@@ -1855,6 +1855,8 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
         ),
         const SizedBox(height: 20),
         _buildInspectorTasksList(),
+        const SizedBox(height: 20),
+        _buildInspectorSubmittedReportsList(isAdmin),
         if (isAdmin) ...[
           const SizedBox(height: 20),
           _buildAdminInspectorsVerificationList(),
@@ -1902,6 +1904,72 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                           icon: const Icon(Icons.assignment_outlined, size: 18),
                           label: const Text('فتح نموذج التقرير الرسمي + تعهد الأمانة', style: TextStyle(fontWeight: FontWeight.w800)),
                         ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInspectorSubmittedReportsList(bool isAdmin) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance.collection('orders').where('inspection_status', isEqualTo: 'report_ready').snapshots(),
+      builder: (context, snap) {
+        final allDocs = snap.data?.docs ?? const [];
+        final docs = isAdmin
+            ? allDocs
+            : allDocs.where((doc) {
+                final inspUid = (doc.data()['inspector_uid'] ?? '').toString();
+                return inspUid.isEmpty || inspUid == uid;
+              }).toList();
+        return _luxuryCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('تقاريري المرفوعة وردود العملاء (ومستحقات الـ 48 ساعة)', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              const Divider(height: 20),
+              if (docs.isEmpty)
+                const Text('لا توجد تقارير مرفوعة بعد.', style: TextStyle(color: LuxuryColors.textSecondary))
+              else
+                ...docs.map((doc) {
+                  final d = doc.data();
+                  final decision = (d['buyer_inspection_decision'] ?? '').toString();
+                  final decisionText = decision == 'approved'
+                      ? 'رد العميل: وافق على التقرير واعتمد المتابعة ✓'
+                      : (decision == 'cancelled'
+                          ? 'رد العميل: ألغى الطلب بعد الاطلاع على التقرير'
+                          : 'رد العميل: بانتظار قرار المشتري');
+                  final decisionColor = decision == 'approved'
+                      ? LuxuryColors.success
+                      : (decision == 'cancelled' ? LuxuryColors.danger : LuxuryColors.navy);
+                  final frozen = d['escrow_frozen'] == true || d['dispute_status'] == 'open';
+                  final payout = (d['inspector_payout_status'] ?? 'escrow_held').toString();
+                  final payoutText = frozen
+                      ? 'المستحقات (200 ر.س): مجمّدة مؤقتاً لوجود نزاع مفتوح'
+                      : (payout.contains('released')
+                          ? 'المستحقات (200 ر.س): تم تحريرها لحسابك ✓'
+                          : 'المستحقات (200 ر.س): محجوزة في الضمان لمدة 48 ساعة');
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: LuxuryColors.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: LuxuryColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                        const SizedBox(height: 4),
+                        Text(decisionText, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: decisionColor)),
+                        const SizedBox(height: 2),
+                        Text(payoutText, style: const TextStyle(fontSize: 12, color: LuxuryColors.textSecondary)),
                       ],
                     ),
                   );

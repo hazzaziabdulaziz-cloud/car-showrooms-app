@@ -415,6 +415,34 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
     );
   }
 
+  String _trackingStatusText(String status, Map<String, dynamic> data) {
+    switch (status) {
+      case 'paid_waiting_showroom':
+      case 'pending_showroom':
+        return 'الحالة: بانتظار تأكيد المعرض (مهلة ساعتين)';
+      case 'confirmed':
+        return 'الحالة: تم تأكيد التوفر ✓ — اختر مسار الإتمام بالأسفل';
+      case 'sold_in_showroom_refunded':
+        return 'الحالة: انباعت السيارة في الصالة — تم استرجاع العربون لحسابك 100%';
+      case 'cancelled_after_confirm':
+      case 'cancelled_financing_rejected':
+      case 'cancelled_refunded_100':
+        return 'الحالة: تم إلغاء الحجز — استرداد العربون 100% لحسابك';
+      case 'pending_admin_forfeit_review':
+        return 'الحالة: بانتظار مراجعة الإدارة لتسوية العربون';
+      case 'cancelled_forfeited_70_30':
+        return 'الحالة: تم إلغاء الحجز بعد التأكيد — العربون غير مسترد (70% معرض / 30% منصة)';
+      case 'refunded_failed_inspection':
+      case 'cancelled_by_buyer_after_inspection':
+      case 'cancelled_by_buyer':
+        return 'الحالة: تم إلغاء الطلب ومعالجة الاسترجاع';
+      case 'completed':
+        return 'الحالة: تم إغلاق الصفقة بنجاح ✓';
+      default:
+        return 'المسار المختار: ${data['post_confirm_label'] ?? status}';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -541,17 +569,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                         Text('المعرض: ${data['showroom_name']} · كود التسليم السري: ${data['handover_pin'] ?? '---'}', style: const TextStyle(color: LuxuryColors.gold, fontSize: 12.5, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 8),
                         Text(
-                          status == 'paid_waiting_showroom'
-                              ? 'الحالة: بانتظار تأكيد المعرض (مهلة ساعتين)'
-                              : status == 'confirmed'
-                                  ? 'الحالة: تم تأكيد التوفر ✓ — اختر مسار الإتمام بالأسفل'
-                                  : status == 'sold_in_showroom_refunded'
-                                      ? 'الحالة: انباعت السيارة في الصالة — تم استرجاع العربون لحسابك 100% تلقائياً'
-                                      : (status == 'refunded_failed_inspection' || status == 'cancelled_by_buyer_after_inspection' || status == 'cancelled_by_buyer')
-                                          ? 'الحالة: تم إلغاء الطلب ومعالجة الاسترجاع'
-                                          : status == 'completed'
-                                              ? 'الحالة: تم إغلاق الصفقة بنجاح ✓'
-                                              : 'المسار المختار: ${data['post_confirm_label'] ?? ''}',
+                          _trackingStatusText(status, data),
                           style: const TextStyle(color: Colors.white, fontSize: 12.5),
                         ),
                         if (inspStatus != 'none')

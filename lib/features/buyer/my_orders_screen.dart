@@ -28,6 +28,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
         return 'مكتمل — تم التسليم ✓';
       case 'sold_in_showroom_refunded':
         return 'انباعت في الصالة — استُرجع العربون';
+      case 'cancelled_after_confirm':
+        return 'ملغى من المعرض — استرداد العربون 100%';
+      case 'cancelled_financing_rejected':
+        return 'رفض تمويل بنكي — استرداد العربون 100%';
+      case 'pending_admin_forfeit_review':
+        return 'بانتظار مراجعة الإدارة للعربون';
+      case 'cancelled_forfeited_70_30':
+        return 'ملغى بعد التأكيد — العربون غير مسترد (70% معرض / 30% منصة)';
+      case 'cancelled_refunded_100':
+        return 'ملغى — تم استرداد العربون 100%';
       case 'cancelled_by_buyer':
       case 'cancelled_by_buyer_after_inspection':
         return 'ملغى من المشتري';
@@ -38,11 +48,11 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     }
   }
 
-  Future<void> _cancelOrder(String docId, String currentStatus) async {
+  Future<void> _cancelOrder(String docId, String currentStatus, String carId) async {
     final waitingShowroom = currentStatus == 'paid_waiting_showroom' || currentStatus == 'pending_showroom';
     final refundPolicy = waitingShowroom
-        ? 'سيتم استرداد العربون كاملاً لعدم تأكيد المعرض بعد.'
-        : 'سيتم إلغاء الطلب ومعالجة الاسترداد وفق سياسة المنصة (مع خصم رسوم الفحص إن تم تنفيذه).';
+        ? 'سيتم إلغاء الحجز واسترداد العربون كاملاً 100% لأن المعرض لم يؤكد توفر السيارة بعد.'
+        : 'تنبيه مهم: تم تأكيد توفر السيارة وتجميدها من المعرض بالفعل؛ في حال إلغائك الآن بدون عيب في الفحص لن يُسترد العربون (70% للمعرض تعويضاً عن تجميد السيارة و30% رسوم خدمة للمنصة وفق إقرار الأمانة). هل تؤكد الإلغاء؟';
 
     final ok = await showDialog<bool>(
       context: context,
@@ -54,7 +64,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: LuxuryColors.danger, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('إلغاء الطلب'),
+            child: Text(waitingShowroom ? 'تأكيد الإلغاء' : 'أوافق على الإلغاء بدون استرداد'),
           ),
         ],
       ),
@@ -62,9 +72,15 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     if (ok != true) return;
 
     await FirebaseFirestore.instance.collection('orders').doc(docId).update({
-      'status': 'cancelled_by_buyer',
+      'status': waitingShowroom ? 'cancelled_by_buyer' : 'cancelled_forfeited_70_30',
+      'refund_decision': waitingShowroom ? 'refund_buyer_100' : 'forfeited_by_buyer_cancel_70_30',
       'cancelled_at': FieldValue.serverTimestamp(),
     });
+    if (carId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('cars').doc(carId).update({'status': 'available'});
+      } catch (_) {}
+    }
   }
 
   Future<void> _openDisputeDialog(String docId, String orderCode) async {
@@ -305,7 +321,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                                 style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.danger, side: const BorderSide(color: LuxuryColors.danger)),
                                 icon: const Icon(Icons.cancel_outlined, size: 16),
                                 label: const Text('إلغاء الحجز'),
-                                onPressed: () => _cancelOrder(id, status),
+                                onPressed: () => _cancelOrder(id, status, (d['car_id'] ?? '').toString()),
                               ),
                             if (status == 'completed' && d['dispute_status'] != 'open')
                               OutlinedButton.icon(
