@@ -1,19 +1,35 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/analytics_and_accounting_service.dart';
+import '../../core/input_sanitizer.dart';
 import '../../core/luxury_theme.dart';
 import '../../core/pricing_rules.dart';
-import '../../core/input_sanitizer.dart';
 
 class OrderTrackingSheet extends StatefulWidget {
-  const OrderTrackingSheet({super.key});
+  final String? initialOrderCode;
+  final String? initialPhoneLast4;
 
-  static Future show(BuildContext context) {
+  const OrderTrackingSheet({
+    super.key,
+    this.initialOrderCode,
+    this.initialPhoneLast4,
+  });
+
+  static Future show(
+    BuildContext context, {
+    String? initialOrderCode,
+    String? initialPhoneLast4,
+  }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const OrderTrackingSheet(),
+      builder: (_) => OrderTrackingSheet(
+        initialOrderCode: initialOrderCode,
+        initialPhoneLast4: initialPhoneLast4,
+      ),
     );
   }
 
@@ -28,6 +44,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
   bool _saving = false;
   bool _demoShowAllPaths = kDebugMode;
   String? _selectedDeliveryCity;
+
   static const _deliveryCities = [
     'الرياض', 'الدمام', 'الخبر', 'الظهران', 'الأحساء', 'الجبيل', 'حفر الباطن',
     'جدة', 'مكة المكرمة', 'الطائف', 'المدينة المنورة', 'ينبع',
@@ -49,7 +66,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
     {
       'id': 'inspection_only',
       'title': 'فحص فني شامل فقط',
-      'subtitle': 'تقرير معتمد (بودي، مكينة، قير، شاصي) يصلك قبل الحضور أو إتمام البيع',
+      'subtitle': 'تقرير معتمد (بودي، مكينة، قير، شاصي، OBD) يصلك قبل إتمام البيع',
       'needs_inspection': true,
       'needs_shipping': false,
       'fee': 250,
@@ -79,13 +96,20 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.initialOrderCode != null) _codeCtrl.text = widget.initialOrderCode!;
+    if (widget.initialPhoneLast4 != null) _phoneLast4Ctrl.text = widget.initialPhoneLast4!;
+  }
+
+  @override
   void dispose() {
     _codeCtrl.dispose();
     _phoneLast4Ctrl.dispose();
     super.dispose();
   }
 
-  Future _confirmPath(DocumentReference ref, Map path, int dynamicShippingFee) async {
+  Future _confirmPath(DocumentReference ref, Map path, int dynamicShippingFee, Map<String, dynamic> orderData) async {
     setState(() => _saving = true);
     try {
       final needsInsp = path['needs_inspection'] == true;
@@ -108,11 +132,45 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
         'platform_tow_share': needsShip ? PricingRules.platformTowShare(dynamicShippingFee) : 0,
         'status': 'path_selected',
       });
+
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final buyerName = (orderData['buyer_name'] ?? 'عميل').toString();
+      if (needsInsp) {
+        await AnalyticsAndAccountingService.trackEvent(AnalyticsAndAccountingService.evBookInspection);
+        try {
+          await AnalyticsAndAccountingService.issueInvoiceAndRecordLedger(
+            orderId: ref.id,
+            customerName: buyerName,
+            customerUid: uid,
+            serviceType: 'inspection',
+            subtotal: PricingRules.inspectionTotal.toDouble(),
+            notes: 'فحص فني شامل - ${orderData['order_code'] ?? ''}',
+          );
+        } catch (_) {}
+      }
+      if (needsShip) {
+        await AnalyticsAndAccountingService.trackEvent(AnalyticsAndAccountingService.evBookFlatbed);
+        try {
+          await AnalyticsAndAccountingService.issueInvoiceAndRecordLedger(
+            orderId: ref.id,
+            customerName: buyerName,
+            customerUid: uid,
+            serviceType: 'flatbed',
+            subtotal: dynamicShippingFee.toDouble(),
+            notes: 'شحن سطحة إلى ${_selectedDeliveryCity ?? 'الرياض'} - ${orderData['order_code'] ?? ''}',
+          );
+        } catch (_) {}
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: LuxuryColors.success,
-          content: Text(needsInsp && needsShip ? 'تم حجز الفاحص والسطحة بنجاح ✓ وأُرسل تنبيه فوري بكامل التفاصيل.' : (needsInsp ? 'تم حجز الفاحص المعتمد بنجاح ✓ وأُرسل له تنبيه فوري.' : (needsShip ? 'تم حجز السطحة بنجاح ✓ وظهرت تفاصيل رحلتك لسائقي السطحات.' : 'تم اعتماد الاستلام المباشر من المعرض ✓'))),
+          content: Text(needsInsp && needsShip
+              ? 'تم حجز الفاحص والسطحة بنجاح ✓ وأُرسل تنبيه فوري بكامل التفاصيل.'
+              : (needsInsp
+                  ? 'تم حجز الفاحص المعتمد بنجاح ✓ وأُرسل له تنبيه فوري.'
+                  : (needsShip ? 'تم حجز السطحة بنجاح ✓ وظهرت تفاصيل رحلتك لسائقي السطحات.' : 'تم اعتماد الاستلام المباشر من المعرض ✓'))),
         ),
       );
     } catch (e) {
@@ -123,7 +181,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
     }
   }
 
-  Widget _buildDynamicPathsSection(DocumentReference orderRef, String regionId, String buyerCity) {
+  Widget _buildDynamicPathsSection(DocumentReference orderRef, String regionId, String buyerCity, Map<String, dynamic> orderData) {
     final activeCity = _selectedDeliveryCity ?? (_deliveryCities.contains(buyerCity) ? buyerCity : 'الرياض');
     final dynamicShip = PricingRules.estimateShippingFee(regionId, activeCity);
     return StreamBuilder(
@@ -153,7 +211,6 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: activeCity,
                   isExpanded: true,
@@ -165,9 +222,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
-                  items: _deliveryCities
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
+                  items: _deliveryCities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                   onChanged: (v) {
                     if (v != null) setState(() => _selectedDeliveryCity = v);
                   },
@@ -182,24 +237,17 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
                       ),
                     ),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _demoShowAllPaths = !_demoShowAllPaths),
-                      icon: Icon(_demoShowAllPaths ? Icons.visibility : Icons.visibility_off, size: 15, color: LuxuryColors.gold),
-                      label: Text(
-                        _demoShowAllPaths ? 'وضع التجربة: الكل ظاهر' : 'إظهار الفحص والسطحة للتجربة',
-                        style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 11),
+                    if (kDebugMode)
+                      TextButton.icon(
+                        onPressed: () => setState(() => _demoShowAllPaths = !_demoShowAllPaths),
+                        icon: Icon(_demoShowAllPaths ? Icons.visibility : Icons.visibility_off, size: 15, color: LuxuryColors.gold),
+                        label: Text(
+                          _demoShowAllPaths ? 'وضع التجربة: الكل ظاهر' : 'إظهار الفحص والسطحة',
+                          style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 11),
+                        ),
                       ),
-                    ),
                   ],
                 ),
-                if (!hasInspectors || !hasTow)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'ملاحظة: تظهر لك فقط الخدمات المتوفرة حالياً في منطقة المعرض (${!hasInspectors ? 'لا يوجد فاحصون مسجلون حالياً' : ''}${(!hasInspectors && !hasTow) ? ' · ' : ''}${!hasTow ? 'لا توجد سطحات متاحة حالياً' : ''}).',
-                      style: const TextStyle(fontSize: 11.5, color: LuxuryColors.textSecondary),
-                    ),
-                  ),
                 const SizedBox(height: 10),
                 ...availablePaths.map((p) {
                   final active = _selectedPath == p['id'];
@@ -226,21 +274,17 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    p['title'] as String,
-                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: LuxuryColors.navy),
-                                  ),
+                                  Text(p['title'] as String, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: LuxuryColors.navy)),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    p['subtitle'] as String,
-                                    style: const TextStyle(fontSize: 11.5, color: LuxuryColors.textSecondary),
-                                  ),
+                                  Text(p['subtitle'] as String, style: const TextStyle(fontSize: 11.5, color: LuxuryColors.textSecondary)),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              p['id'] == 'inspection_and_shipping' ? '+${PricingRules.inspectionTotal + dynamicShip} ر.س' : (p['id'] == 'shipping_only' ? '+$dynamicShip ر.س' : p['badge'] as String),
+                              p['id'] == 'inspection_and_shipping'
+                                  ? '+${PricingRules.inspectionTotal + dynamicShip} ر.س'
+                                  : (p['id'] == 'shipping_only' ? '+$dynamicShip ر.س' : p['badge'] as String),
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
                             ),
                           ],
@@ -267,7 +311,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                               setState(() => _selectedPath = null);
                               return;
                             }
-                            _confirmPath(orderRef, matches.first, dynamicShip);
+                            _confirmPath(orderRef, matches.first, dynamicShip, orderData);
                           },
                     child: Text(
                       _saving ? 'جاري الاعتماد...' : 'اعتماد المسار المختار والمتابعة',
@@ -285,6 +329,11 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final query = uid != null
+        ? FirebaseFirestore.instance.collection('orders').where('buyer_uid', isEqualTo: uid).orderBy('created_at', descending: true).limit(20)
+        : FirebaseFirestore.instance.collection('orders').orderBy('created_at', descending: true).limit(20);
+
     return Container(
       margin: const EdgeInsets.all(12),
       padding: EdgeInsets.fromLTRB(22, 18, 22, MediaQuery.of(context).viewInsets.bottom + 22),
@@ -295,11 +344,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
       ),
       child: SingleChildScrollView(
         child: StreamBuilder(
-          stream: FirebaseFirestore.instance
-              .collection('orders')
-              .orderBy('created_at', descending: true)
-              .limit(20)
-              .snapshots(),
+          stream: query.snapshots(),
           builder: (context, snap) {
             final docs = snap.data?.docs ?? const [];
             final codeQ = _codeCtrl.text.trim().toUpperCase();
@@ -347,7 +392,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                         style: TextStyle(fontSize: 12, color: LuxuryColors.textSecondary),
                       ),
                     ),
-                    if (docs.isNotEmpty)
+                    if (kDebugMode && docs.isNotEmpty)
                       TextButton.icon(
                         onPressed: () {
                           final first = docs.first.data();
@@ -357,10 +402,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                           });
                         },
                         icon: const Icon(Icons.flash_on, size: 15, color: LuxuryColors.gold),
-                        label: const Text(
-                          'تعبئة آخر حجز للتجربة',
-                          style: TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 11.5),
-                        ),
+                        label: const Text('تعبئة آخر حجز', style: TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 11.5)),
                       ),
                   ],
                 ),
@@ -391,22 +433,12 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                 if (!canShow)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Center(
-                      child: Text(
-                        'أدخل رقم الحجز وآخر 4 أرقام من جوالك لعرض التفاصيل.',
-                        style: TextStyle(color: LuxuryColors.textSecondary, fontSize: 13),
-                      ),
-                    ),
+                    child: Center(child: Text('أدخل رقم الحجز وآخر 4 أرقام من جوالك لعرض التفاصيل.', style: TextStyle(color: LuxuryColors.textSecondary, fontSize: 13))),
                   )
                 else if (latestDoc == null || data == null)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Center(
-                      child: Text(
-                        'لم يتم العثور على حجز مطابق لهذه البيانات.',
-                        style: TextStyle(color: LuxuryColors.danger, fontSize: 13),
-                      ),
-                    ),
+                    child: Center(child: Text('لم يتم العثور على حجز مطابق لهذه البيانات.', style: TextStyle(color: LuxuryColors.danger, fontSize: 13))),
                   )
                 else ...[
                   Container(
@@ -416,15 +448,9 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${data['order_code']} · ${data['car_title']}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
-                        ),
+                        Text('${data['order_code']} · ${data['car_title']}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
                         const SizedBox(height: 4),
-                        Text(
-                          'المعرض: ${data['showroom_name']} · كود التسليم السري: ${data['handover_pin'] ?? '---'}',
-                          style: const TextStyle(color: LuxuryColors.gold, fontSize: 12.5, fontWeight: FontWeight.w700),
-                        ),
+                        Text('المعرض: ${data['showroom_name']} · كود التسليم السري: ${data['handover_pin'] ?? '---'}', style: const TextStyle(color: LuxuryColors.gold, fontSize: 12.5, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 8),
                         Text(
                           status == 'paid_waiting_showroom'
@@ -433,8 +459,8 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                                   ? 'الحالة: تم تأكيد التوفر ✓ — اختر مسار الإتمام بالأسفل'
                                   : status == 'sold_in_showroom_refunded'
                                       ? 'الحالة: انباعت السيارة في الصالة — تم استرجاع العربون لحسابك 100% تلقائياً'
-                                      : (status == 'refunded_failed_inspection' || status == 'cancelled_by_buyer_after_inspection')
-                                          ? 'الحالة: تم إلغاء الطلب بعد الفحص واسترجاع العربون'
+                                      : (status == 'refunded_failed_inspection' || status == 'cancelled_by_buyer_after_inspection' || status == 'cancelled_by_buyer')
+                                          ? 'الحالة: تم إلغاء الطلب ومعالجة الاسترجاع'
                                           : status == 'completed'
                                               ? 'الحالة: تم إغلاق الصفقة بنجاح ✓'
                                               : 'المسار المختار: ${data['post_confirm_label'] ?? ''}',
@@ -443,10 +469,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                         if (inspStatus != 'none')
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              'حالة الفحص: ${data['inspection_report'] ?? 'بانتظار الفاحص المعتمد'}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
+                            child: Text('حالة الفحص: ${data['inspection_report'] ?? 'بانتظار الفاحص المعتمد'}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
                           ),
                         if (shipStatus != 'none')
                           Padding(
@@ -476,10 +499,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                             children: [
                               Icon(Icons.verified, color: LuxuryColors.gold, size: 18),
                               SizedBox(width: 6),
-                              Text(
-                                'تقرير الفحص المعتمد من معرضي',
-                                style: TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 13.5),
-                              ),
+                              Text('تقرير الفحص المعتمد من معرضي', style: TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 13.5)),
                             ],
                           ),
                           const Divider(height: 16),
@@ -488,22 +508,18 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                           Text('• الشاصي: ${(data['inspection_details'] as Map)['chassis'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
                           Text('• البودي والرش: ${(data['inspection_details'] as Map)['body'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
                           Text('• الإيرباقات: ${(data['inspection_details'] as Map)['airbags'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
+                          Text('• فحص الكمبيوتر (OBD): ${(data['inspection_details'] as Map)['obd_status'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
                           Text('• المكيف والعضلات: ${(data['inspection_details'] as Map)['ac_and_suspension'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
+                          Text('• الكفرات والفرامل: ${(data['inspection_details'] as Map)['tires_brakes'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
+                          Text('• الداخلية والمفاتيح: ${(data['inspection_details'] as Map)['interior_keys'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
                           Text('• العداد: ${(data['inspection_details'] as Map)['odometer'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
+                          Text('• تكلفة إصلاح تقديرية: ${(data['inspection_details'] as Map)['estimated_repair_cost'] ?? '0 ر.س'}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
                           Text('• ملاحظات: ${(data['inspection_details'] as Map)['notes'] ?? '-'}', style: const TextStyle(fontSize: 12.5)),
                           const SizedBox(height: 6),
-                          const Text(
-                            'موثّق إلكترونياً بتعهد الأمانة وتحمل المسؤولية من الفاحص ✓',
-                            style: TextStyle(fontSize: 11.5, color: LuxuryColors.success, fontWeight: FontWeight.w700),
-                          ),
-                          if (data['buyer_inspection_decision'] == null &&
-                              status != 'completed' &&
-                              status != 'cancelled_by_buyer_after_inspection') ...[
+                          const Text('موثّق إلكترونياً بتعهد الأمانة وتحمل المسؤولية من الفاحص ✓', style: TextStyle(fontSize: 11.5, color: LuxuryColors.success, fontWeight: FontWeight.w700)),
+                          if (data['buyer_inspection_decision'] == null && status != 'completed' && status != 'cancelled_by_buyer_after_inspection') ...[
                             const Divider(height: 18),
-                            const Text(
-                              'قرارك بعد الاطلاع على التقرير:',
-                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
-                            ),
+                            const Text('قرارك بعد الاطلاع على التقرير:', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                             const SizedBox(height: 8),
                             Row(
                               children: [
@@ -520,10 +536,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: OutlinedButton(
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: LuxuryColors.danger,
-                                      side: const BorderSide(color: LuxuryColors.danger),
-                                    ),
+                                    style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.danger, side: const BorderSide(color: LuxuryColors.danger)),
                                     onPressed: () => latestDoc.reference.update({
                                       'buyer_inspection_decision': 'cancelled',
                                       'status': 'cancelled_by_buyer_after_inspection',
@@ -552,56 +565,11 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'فاتورة المبايعة ونقل الملكية (تم / أبشر) جاهزة ✓',
-                            style: TextStyle(color: LuxuryColors.success, fontWeight: FontWeight.w800, fontSize: 13.5),
-                          ),
+                          const Text('فاتورة المبايعة ونقل الملكية (تم / أبشر) جاهزة ✓', style: TextStyle(color: LuxuryColors.success, fontWeight: FontWeight.w800, fontSize: 13.5)),
                           const SizedBox(height: 4),
-                          Text(
-                            'المبلغ المتبقي بعد خصم العربون: ${data['remaining_amount'] ?? '---'} ر.س',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                          ),
-                          Text(
-                            'الحساب البنكي الرسمي للمعرض: ${data['showroom_bank'] ?? 'المسجل بالتطبيق'} · ${data['showroom_iban'] ?? '---'}',
-                            style: const TextStyle(fontSize: 12, color: LuxuryColors.navy),
-                          ),
+                          Text('المبلغ المتبقي بعد خصم العربون: ${data['remaining_amount'] ?? '---'} ر.س', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                          Text('الحساب البنكي الرسمي للمعرض: ${data['showroom_bank'] ?? 'المسجل بالتطبيق'} · ${data['showroom_iban'] ?? '---'}', style: const TextStyle(fontSize: 12, color: LuxuryColors.navy)),
                         ],
-                      ),
-                    ),
-                  ],
-                  if (status == 'completed' || shipStatus == 'delivered') ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: LuxuryColors.danger,
-                          side: const BorderSide(color: LuxuryColors.danger),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: data['dispute_opened'] == true
-                            ? null
-                            : () async {
-                                await latestDoc.reference.update({
-                                  'dispute_opened': true,
-                                  'dispute_at': FieldValue.serverTimestamp(),
-                                });
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      backgroundColor: LuxuryColors.danger,
-                                      content: Text('تم فتح بلاغ اعتراض رسمي وتجميد مستحقات الفاحص (نافذة 24 ساعة / 50 كم).'),
-                                    ),
-                                  );
-                                }
-                              },
-                        icon: const Icon(Icons.report_problem_outlined, size: 18),
-                        label: Text(
-                          data['dispute_opened'] == true
-                              ? 'تم فتح بلاغ الاعتراض وجارٍ التحقق'
-                              : 'رفع اعتراض (نافذة 24 ساعة أو 50 كم من الاستلام)',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
-                        ),
                       ),
                     ),
                   ],
@@ -610,6 +578,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                       latestDoc.reference,
                       (data['region_id'] ?? 'riyadh').toString(),
                       (data['buyer_city'] ?? 'الرياض').toString(),
+                      data,
                     ),
                 ],
               ],

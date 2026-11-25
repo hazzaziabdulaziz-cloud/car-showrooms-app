@@ -2,48 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // === الإحصائيات والتتبع ===
-    match /analytics_summary/{docId} {
-      allow read: if isAdmin();
-      allow create, update: if true;
-      allow delete: if false;
-    }
-    match /analytics_daily/{docId} {
-      allow read: if isAdmin();
-      allow create, update: if true;
-      allow delete: if false;
-    }
-    match /analytics_events/{docId} {
-      allow read: if isAdmin();
-      allow create: if true;
-      allow update, delete: if false;
-    }
-
-    // === أكواد الخصم والكوبونات ===
-    match /discount_codes/{code} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if isAdmin();
-    }
-
-    // === الفواتير وسيستم الحسابات ===
-    match /invoices/{invoiceId} {
-      allow read: if isAdmin() || (request.auth != null && resource.data.customerUid == request.auth.uid);
-      allow create: if request.auth != null;
-      allow update, delete: if isAdmin();
-    }
-    match /ledger_entries/{entryId} {
-      allow read, update, delete: if isAdmin();
-      allow create: if request.auth != null;
-    }
-
-    // === سجل الأخطاء المعزولة ===
-    match /app_error_logs/{logId} {
-      allow read, delete: if isAdmin();
-      allow create: if true;
-      allow update: if false;
-    }
-
-
     function isSignedIn() {
       return request.auth != null;
     }
@@ -55,44 +13,113 @@ service cloud.firestore {
       );
     }
 
-    // المستخدمون: كل مستخدم يقرأ ويعدل ملفه فقط
+    // === الإحصائيات والتتبع ===
+    match /analytics_summary/{docId} {
+      allow read: if isAdmin();
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+    }
+    match /analytics_daily/{docId} {
+      allow read: if isAdmin();
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+    }
+    match /analytics_events/{docId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // === أكواد الخصم والكوبونات ===
+    match /discount_codes/{code} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCount']) &&
+        request.resource.data.usedCount == resource.data.get('usedCount', 0) + 1
+      );
+    }
+
+    // === الفواتير وسيستم الحسابات ===
+    match /invoices/{invoiceId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
+      allow create: if isAdmin() || (isSignedIn() && request.resource.data.customerUid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+    match /ledger_entries/{entryId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.direction == 'in' &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0
+      );
+    }
+
+    // === سجل الأخطاء المعزولة ===
+    match /app_error_logs/{logId} {
+      allow read, delete: if isAdmin();
+      allow create: if isSignedIn();
+      allow update: if false;
+    }
+
+    // === المستخدمون ===
     match /users/{uid} {
       allow read, write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
-    // المعارض والسيارات: القراءة متاحة للجميع، والتعديل لمالك المعرض أو المدير فقط
+    // === المعارض والسيارات ===
     match /showrooms/{showroomId} {
       allow read: if true;
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.owner_uid == request.auth.uid;
       allow update, delete: if isSignedIn() && (resource.data.owner_uid == request.auth.uid || isAdmin());
     }
 
     match /cars/{carId} {
       allow read: if true;
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.owner_uid == request.auth.uid;
       allow update, delete: if isSignedIn() && (resource.data.owner_uid == request.auth.uid || isAdmin());
     }
 
-    // الطلبات: المشتري يقرأ طلباته فقط، ولا يُسمح بتغيير المبالغ أو حالة الدفع من الجوال
+    // === عملاء الحجز (buyer_leads) ===
+    match /buyer_leads/{leadId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // === الطلبات والحجوزات ===
     match /orders/{orderId} {
       allow read: if isSignedIn() && (
+        isAdmin() ||
         resource.data.buyer_uid == request.auth.uid ||
         resource.data.showroom_owner_uid == request.auth.uid ||
         resource.data.inspector_uid == request.auth.uid ||
         resource.data.tow_uid == request.auth.uid ||
-        isAdmin()
+        resource.data.inspection_status == 'pending_inspector' ||
+        resource.data.shipping_status == 'pending_tow'
       );
       allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
       allow update: if isAdmin() || (
         isSignedIn() &&
+        (
+          resource.data.buyer_uid == request.auth.uid ||
+          resource.data.showroom_owner_uid == request.auth.uid ||
+          resource.data.inspector_uid == request.auth.uid ||
+          resource.data.tow_uid == request.auth.uid ||
+          resource.data.inspection_status == 'pending_inspector' ||
+          resource.data.shipping_status == 'pending_tow'
+        ) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'deposit_paid', 'platform_fee', 'inspector_payout_status', 'car_price'
+          'deposit_paid', 'platform_fee', 'inspector_payout_status',
+          'car_price', 'total_paid', 'reservation_fee', 'handover_pin',
+          'escrow_protected', 'buyer_uid'
         ])
       );
       allow delete: if isAdmin();
     }
 
-    // النزاعات والتقييمات
+    // === النزاعات والتقييمات ===
     match /disputes/{disputeId} {
       allow read: if isSignedIn() && (resource.data.buyer_uid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.buyer_uid == request.auth.uid;
@@ -105,17 +132,25 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // الفاحصون وكباتن السطحة
+    // === الفاحصون وكباتن السطحة (يدعم owner_uid و uid) ===
     match /inspectors/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if isSignedIn() && (
+        resource.data.owner_uid == request.auth.uid ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
     }
 
     match /tow_drivers/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if isSignedIn() && (
+        resource.data.owner_uid == request.auth.uid ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
     }
   }
 }

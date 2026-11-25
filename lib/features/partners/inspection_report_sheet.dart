@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/luxury_theme.dart';
@@ -43,13 +44,13 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
   String _body = 'بودي وكالة بالكامل';
   String _airbags = 'سليمة (لم تخرج)';
   String _acAndSusp = 'ممتازة';
-
-  final _odometerCtrl = TextEditingController();
-  final _notesCtrl = TextEditingController();
-  final _repairCostCtrl = TextEditingController(text: '0');
   String _obdStatus = 'سليم بدون أكواد عطل (OBD-II)';
   String _tiresBrakes = 'جديدة / ممتازة';
   String _interiorKeys = 'نظيفة وكالة + مفتاحين';
+
+  final _odometerCtrl = TextEditingController();
+  final _repairCostCtrl = TextEditingController(text: '0');
+  final _notesCtrl = TextEditingController();
   bool _pledgeAccepted = false;
   bool _saving = false;
   String? _error;
@@ -57,6 +58,7 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
   @override
   void dispose() {
     _odometerCtrl.dispose();
+    _repairCostCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -71,6 +73,7 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
       _error = null;
     });
     try {
+      final repairEst = _repairCostCtrl.text.trim().isEmpty ? '0' : _repairCostCtrl.text.trim();
       final reportDetails = {
         'engine': _engine,
         'gear': _gear,
@@ -78,14 +81,20 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
         'body': _body,
         'airbags': _airbags,
         'ac_and_suspension': _acAndSusp,
+        'obd_status': _obdStatus,
+        'tires_brakes': _tiresBrakes,
+        'interior_keys': _interiorKeys,
+        'estimated_repair_cost': '$repairEst ر.س',
         'odometer': _odometerCtrl.text.trim().isEmpty ? 'غير محدد' : '${_odometerCtrl.text.trim()} كم',
         'notes': _notesCtrl.text.trim().isEmpty ? 'لا توجد ملاحظات إضافية' : _notesCtrl.text.trim(),
       };
 
       await widget.orderRef.update({
+        'inspector_uid': FirebaseAuth.instance.currentUser?.uid ?? '',
         'inspection_status': 'report_ready',
         'inspection_report': 'تقرير الفحص المعتمد جاهز — بانتظار قرار المشتري',
         'inspection_details': reportDetails,
+        'inspection_completed_at': FieldValue.serverTimestamp(),
         'inspector_pledge_accepted': true,
         'inspector_pledge_text':
             'تعهد الفاحص بالتزام الأمانة وتحمل كامل المسؤولية النظامية والمالية مع إخلاء مسؤولية معرضي كوسيط تقني، والموافقة على حجز المستحقات 48 ساعة ونافذة الاعتراض 24 ساعة.',
@@ -97,7 +106,7 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: LuxuryColors.success,
-          content: Text('تم رفع التقرير الرسمي للمشتري بنجاح وتقييد التعهد.'),
+          content: Text('تم رفع التقرير الرسمي الشامل للمشتري بنجاح وتقييد التعهد.'),
         ),
       );
     } catch (e) {
@@ -163,9 +172,21 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
             const SizedBox(height: 10),
             _drop('الإيرباقات والأنظمة الإلكترونية', _airbags, ['سليمة (لم تخرج)', 'تنبيهات كمبيوتر بسيطة', 'إيرباق خارج / عطل حساس'], (v) => setState(() => _airbags = v)),
             const SizedBox(height: 10),
+            _drop('فحص الكمبيوتر (OBD-II)', _obdStatus, ['سليم بدون أكواد عطل (OBD-II)', 'أكواد بسيطة غير مؤثرة', 'أكواد أعطال جوهرية'], (v) => setState(() => _obdStatus = v)),
+            const SizedBox(height: 10),
             _drop('المكيف والعضلات السفلية', _acAndSusp, ['ممتازة', 'تحتاج صيانة استهلاكية', 'تحتاج إصلاح كبير'], (v) => setState(() => _acAndSusp = v)),
             const SizedBox(height: 10),
-            TextField(controller: _odometerCtrl, keyboardType: TextInputType.number, decoration: luxuryInput('قراءة العداد الفعلية (كم)', icon: Icons.speed)),
+            _drop('الكفرات والفرامل', _tiresBrakes, ['جديدة / ممتازة', 'متوسطة (نصف عمر)', 'تحتاج استبدال قريباً'], (v) => setState(() => _tiresBrakes = v)),
+            const SizedBox(height: 10),
+            _drop('الداخلية والمفاتيح', _interiorKeys, ['نظيفة وكالة + مفتاحين', 'نظيفة + مفتاح واحد فقط', 'ملاحظات تنجيد أو إكسسوارات'], (v) => setState(() => _interiorKeys = v)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: TextField(controller: _odometerCtrl, keyboardType: TextInputType.number, decoration: luxuryInput('قراءة العداد (كم)', icon: Icons.speed))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: _repairCostCtrl, keyboardType: TextInputType.number, decoration: luxuryInput('تكلفة إصلاح تقديرية (ر.س)', icon: Icons.build_outlined))),
+              ],
+            ),
             const SizedBox(height: 10),
             TextField(controller: _notesCtrl, maxLines: 2, decoration: luxuryInput('ملاحظات الفاحص التفصيلية (تظهر للمشتري)')),
             const SizedBox(height: 14),

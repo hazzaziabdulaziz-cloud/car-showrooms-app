@@ -1,34 +1,42 @@
-import '../../core/password_policy.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/luxury_theme.dart';
-import '../../core/pricing_rules.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import '../../core/analytics_and_accounting_service.dart';
 import '../../core/input_sanitizer.dart';
+import '../../core/luxury_theme.dart';
+import '../../core/password_policy.dart';
+import '../../core/pricing_rules.dart';
 
 class BuyerVerificationSheet extends StatefulWidget {
+  final String? carId;
   final String? interestedCarTitle;
   final int carPrice;
   final String? showroomId;
   final String? showroomName;
+  final String? showroomOwnerUid;
   final String? regionId;
 
   const BuyerVerificationSheet({
     super.key,
+    this.carId,
     this.interestedCarTitle,
     this.carPrice = 0,
     this.showroomId,
     this.showroomName,
+    this.showroomOwnerUid,
     this.regionId,
   });
 
   static Future show(
     BuildContext context, {
+    String? carId,
     String? carTitle,
     int carPrice = 0,
     String? showroomId,
     String? showroomName,
+    String? showroomOwnerUid,
     String? regionId,
   }) {
     return showModalBottomSheet(
@@ -36,10 +44,12 @@ class BuyerVerificationSheet extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => BuyerVerificationSheet(
+        carId: carId,
         interestedCarTitle: carTitle,
         carPrice: carPrice,
         showroomId: showroomId,
         showroomName: showroomName,
+        showroomOwnerUid: showroomOwnerUid,
         regionId: regionId,
       ),
     );
@@ -50,13 +60,68 @@ class BuyerVerificationSheet extends StatefulWidget {
 }
 
 class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
-  // 0: بيانات المشتري | 1: كود OTP | 2: طريقة الشراء (كاش/تمويل) | 3: دفع عربون الحجز فقط
   int _step = 0;
   final _authEmailCtrl = TextEditingController();
   final _authPassCtrl = TextEditingController();
   bool _isSignUp = true;
   bool _authLoading = false;
   String? _authError;
+
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
+  final _salaryCtrl = TextEditingController();
+  final _couponCtrl = TextEditingController();
+
+  String _selectedCity = 'الرياض';
+  String _generatedOtp = '';
+  String? _inlineError;
+  bool _saving = false;
+  bool _antiBypassAgreed = false;
+
+  double _discountAmount = 0;
+  String? _appliedCoupon;
+  String? _couponMsg;
+  bool _couponValid = false;
+  bool _checkingCoupon = false;
+
+  String _paymentMethod = 'شراء كاش (قيمة السيارة)';
+  String _salaryBank = 'مصرف الراجحي';
+  String _workSector = 'حكومي';
+  String _paymentGateway = 'مدى (Mada)';
+
+  int get _reservationFee => PricingRules.reservationFee(widget.carPrice);
+  int get _finalFee => (_reservationFee - _discountAmount).clamp(0, _reservationFee.toDouble()).round();
+
+  static const _saudiCities = [
+    'الرياض', 'الدمام', 'الخبر', 'الظهران', 'الأحساء', 'الجبيل',
+    'جدة', 'مكة المكرمة', 'الطائف', 'المدينة المنورة', 'ينبع',
+    'بريدة (القصيم)', 'أبها (عسير)', 'خميس مشيط', 'تبوك', 'حائل',
+    'جازان', 'نجران', 'الباحة', 'سكاكا (الجوف)', 'عرعر',
+  ];
+
+  static const _payments = ['شراء كاش (قيمة السيارة)', 'تمويل بنكي', 'تأجير منتهي بالتمليك'];
+  static const _banks = [
+    'مصرف الراجحي', 'البنك الأهلي السعودي (SNB)', 'بنك الرياض',
+    'مصرف الإنماء', 'بنك البلاد', 'البنك السعودي الأول (SAB)',
+    'البنك السعودي الفرنسي (BSF)', 'البنك العربي الوطني (ANB)',
+    'بنك الجزيرة', 'البنك السعودي للاستثمار (SAIB)', 'بنك الخليج الدولي (ميم)',
+    'بنك STC (stc bank)', 'بنك D360', 'بنك فيجن (Vision Bank)', 'بنك آخر',
+  ];
+  static const _sectors = ['حكومي', 'شبه حكومي', 'قطاع خاص', 'أعمال حرة'];
+  static const _gateways = ['مدى (Mada)', 'Apple Pay', 'بطاقة ائتمانية'];
+
+  @override
+  void dispose() {
+    _authEmailCtrl.dispose();
+    _authPassCtrl.dispose();
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _otpCtrl.dispose();
+    _salaryCtrl.dispose();
+    _couponCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _submitBuyerAuth() async {
     final email = _authEmailCtrl.text.trim();
@@ -75,7 +140,10 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
       setState(() => _authError = 'يرجى إدخال كلمة المرور');
       return;
     }
-    setState(() { _authLoading = true; _authError = null; });
+    setState(() {
+      _authLoading = true;
+      _authError = null;
+    });
     try {
       if (_isSignUp) {
         await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: pass);
@@ -94,6 +162,40 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                   : 'تعذر إتمام العملية: ${e.message ?? e.code}');
         });
       }
+    }
+  }
+
+  Future<void> _applyCoupon() async {
+    final code = _couponCtrl.text.trim();
+    if (code.isEmpty) return;
+    setState(() {
+      _checkingCoupon = true;
+      _couponMsg = null;
+    });
+    try {
+      final res = await AnalyticsAndAccountingService.validateDiscount(
+        code: code,
+        subtotal: _reservationFee.toDouble(),
+        scope: 'car',
+      );
+      if (!mounted) return;
+      final ok = res['valid'] == true;
+      setState(() {
+        _couponValid = ok;
+        _couponMsg = (res['message'] ?? '').toString();
+        _discountAmount = ok ? (res['discountAmount'] as num).toDouble() : 0;
+        _appliedCoupon = ok ? (res['code'] ?? code.toUpperCase()).toString() : null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _couponValid = false;
+        _discountAmount = 0;
+        _appliedCoupon = null;
+        _couponMsg = 'تعذر التحقق من الكود حالياً.';
+      });
+    } finally {
+      if (mounted) setState(() => _checkingCoupon = false);
     }
   }
 
@@ -160,7 +262,10 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () => setState(() { _isSignUp = !_isSignUp; _authError = null; }),
+              onPressed: () => setState(() {
+                _isSignUp = !_isSignUp;
+                _authError = null;
+              }),
               child: Text(
                 _isSignUp ? 'لديك حساب بالفعل؟ سجّل الدخول' : 'مستخدم جديد؟ أنشئ حساباً الآن',
                 style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w700),
@@ -170,52 +275,6 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
         ),
       ),
     );
-  }
-
-
-  final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _otpCtrl = TextEditingController();
-  final _salaryCtrl = TextEditingController();
-
-  String _selectedCity = 'الرياض';
-  String _generatedOtp = '';
-  String? _inlineError;
-  bool _saving = false;
-  bool _antiBypassAgreed = false;
-
-  String _paymentMethod = 'شراء كاش (قيمة السيارة)';
-  String _salaryBank = 'مصرف الراجحي';
-  String _workSector = 'حكومي';
-  String _paymentGateway = 'مدى (Mada)';
-
-  int get _reservationFee => PricingRules.reservationFee(widget.carPrice);
-
-  static const _saudiCities = [
-    'الرياض', 'الدمام', 'الخبر', 'الظهران', 'الأحساء', 'الجبيل',
-    'جدة', 'مكة المكرمة', 'الطائف', 'المدينة المنورة', 'ينبع',
-    'بريدة (القصيم)', 'أبها (عسير)', 'خميس مشيط', 'تبوك', 'حائل',
-    'جازان', 'نجران', 'الباحة', 'سكاكا (الجوف)', 'عرعر',
-  ];
-
-  static const _payments = ['شراء كاش (قيمة السيارة)', 'تمويل بنكي', 'تأجير منتهي بالتمليك'];
-  static const _banks = [
-    'مصرف الراجحي', 'البنك الأهلي السعودي (SNB)', 'بنك الرياض',
-    'مصرف الإنماء', 'بنك البلاد', 'البنك السعودي الأول (SAB)',
-    'البنك السعودي الفرنسي (BSF)', 'البنك العربي الوطني (ANB)',
-    'بنك الجزيرة', 'البنك السعودي للاستثمار (SAIB)', 'بنك الخليج الدولي (ميم)',
-    'بنك STC (stc bank)', 'بنك D360', 'بنك فيجن (Vision Bank)', 'بنك آخر',
-  ];
-  static const _sectors = ['حكومي', 'شبه حكومي', 'قطاع خاص', 'أعمال حرة'];
-  static const _gateways = ['مدى (Mada)', 'Apple Pay', 'بطاقة ائتمانية'];
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _otpCtrl.dispose();
-    _salaryCtrl.dispose();
-    super.dispose();
   }
 
   void _sendOtp() {
@@ -232,8 +291,9 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
 
   void _verifyOtp() {
     final entered = InputSanitizer.normalizeDigits(_otpCtrl.text.trim());
-    if (entered != _generatedOtp && entered != '1234') {
-      setState(() => _inlineError = 'الكود غير مطابق. أدخل الكود الظاهر في الصندوق الذهبي أعلاه.');
+    final validDebugOverride = kDebugMode && entered == '1234';
+    if (entered != _generatedOtp && !validDebugOverride) {
+      setState(() => _inlineError = 'كود التفعيل غير مطابق، يرجى التأكد والمحاولة مرة أخرى.');
       return;
     }
     setState(() {
@@ -252,53 +312,69 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
       _inlineError = null;
     });
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       final isFinancing = !_paymentMethod.contains('كاش');
       final orderCode = 'MRD-${100000 + Random().nextInt(899999)}';
       final handoverPin = (1000 + Random().nextInt(8999)).toString();
       final phone = InputSanitizer.cleanSaudiPhone(_phoneCtrl.text);
+
       try {
         final existingActive = await FirebaseFirestore.instance
             .collection('orders')
-            .where('buyer_phone', isEqualTo: phone)
+            .where('buyer_uid', isEqualTo: uid)
             .where('status', whereIn: ['paid_waiting_showroom', 'confirmed', 'path_selected'])
             .limit(1)
             .get();
         if (existingActive.docs.isNotEmpty) {
           if (!mounted) return;
           setState(() {
-            _inlineError = 'لديك حجز نشط حالياً بهذا الرقم. يُسمح بحجز واحد نشط في نفس الوقت.';
+            _inlineError = 'لديك حجز نشط حالياً. يُسمح بحجز واحد نشط في نفس الوقت.';
             _saving = false;
           });
           return;
         }
       } catch (_) {}
+
       final phoneLast4 = phone.length >= 4 ? phone.substring(phone.length - 4) : phone;
       final slaDeadline = DateTime.now().add(const Duration(hours: 2));
 
-      await FirebaseFirestore.instance.collection('orders').add({
+      String ownerUid = widget.showroomOwnerUid ?? '';
+      if (ownerUid.isEmpty && (widget.showroomId ?? '').isNotEmpty) {
+        try {
+          final srDoc = await FirebaseFirestore.instance.collection('showrooms').doc(widget.showroomId).get();
+          ownerUid = (srDoc.data()?['owner_uid'] ?? '').toString();
+        } catch (_) {}
+      }
+
+      final orderDoc = await FirebaseFirestore.instance.collection('orders').add({
         'order_code': orderCode,
         'handover_pin': handoverPin,
         'status': 'paid_waiting_showroom',
+        'car_id': widget.carId ?? '',
         'showroom_id': widget.showroomId ?? 'general',
         'showroom_name': widget.showroomName ?? 'معرض معتمد',
+        'showroom_owner_uid': ownerUid,
         'region_id': widget.regionId ?? 'riyadh',
         'car_title': widget.interestedCarTitle ?? 'طلب عام',
         'car_price': widget.carPrice,
         'pricing_tier': PricingRules.tierLabel(widget.carPrice),
-        'buyer_uid': FirebaseAuth.instance.currentUser?.uid ?? '',
+        'buyer_uid': uid,
         'buyer_name': _nameCtrl.text.trim(),
         'buyer_phone': phone,
         'buyer_phone_last4': phoneLast4,
         'buyer_city': _selectedCity,
         'payment_method': _paymentMethod,
         'reservation_fee': _reservationFee,
-        'total_paid': _reservationFee,
+        'discount_code': _appliedCoupon,
+        'discount_amount': _discountAmount,
+        'total_paid': _finalFee,
         'payment_gateway': _paymentGateway,
         'escrow_protected': true,
         'inspection_status': 'none',
         'shipping_status': 'none',
         'invoice_issued': false,
         'sla_deadline': Timestamp.fromDate(slaDeadline),
+        'sla_expires_at': Timestamp.fromDate(slaDeadline),
         if (isFinancing) ...{
           'salary_bank': _salaryBank,
           'work_sector': _workSector,
@@ -307,17 +383,42 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
         'created_at': FieldValue.serverTimestamp(),
       });
 
-      await FirebaseFirestore.instance.collection('buyer_leads').add({
-        'order_code': orderCode,
-        'name': _nameCtrl.text.trim(),
-        'phone': phone,
-        'city': _selectedCity,
-        'payment_method': _paymentMethod,
-        'interested_car': widget.interestedCarTitle ?? 'تصفح عام',
-        'showroom_name': widget.showroomName ?? 'معرض معتمد',
-        'paid_escrow': _reservationFee,
-        'created_at': FieldValue.serverTimestamp(),
-      });
+      try {
+        await FirebaseFirestore.instance.collection('buyer_leads').add({
+          'order_code': orderCode,
+          'name': _nameCtrl.text.trim(),
+          'phone': phone,
+          'city': _selectedCity,
+          'payment_method': _paymentMethod,
+          'interested_car': widget.interestedCarTitle ?? 'تصفح عام',
+          'showroom_name': widget.showroomName ?? 'معرض معتمد',
+          'paid_escrow': _finalFee,
+          'created_at': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+
+      await AnalyticsAndAccountingService.trackEvent(
+        AnalyticsAndAccountingService.evBookCar,
+        meta: {
+          'order_code': orderCode,
+          'car': widget.interestedCarTitle ?? '',
+          'showroom': widget.showroomName ?? '',
+          'amount': _finalFee,
+        },
+      );
+
+      try {
+        await AnalyticsAndAccountingService.issueInvoiceAndRecordLedger(
+          orderId: orderDoc.id,
+          customerName: _nameCtrl.text.trim(),
+          customerUid: uid,
+          serviceType: 'car_booking',
+          subtotal: _reservationFee.toDouble(),
+          discountAmount: _discountAmount,
+          discountCode: _appliedCoupon,
+          notes: '${widget.interestedCarTitle ?? ''} ($orderCode)',
+        );
+      } catch (_) {}
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -344,7 +445,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                 child: Text('كود التسليم السري: $handoverPin (لا تشاركه إلا عند الاستلام)', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 13)),
               ),
               const SizedBox(height: 8),
-              Text('العربون المحجوز في الضمان: $_reservationFee ر.س (يُخصم من قيمة السيارة).'),
+              Text('العربون المحجوز في الضمان: $_finalFee ر.س${_discountAmount > 0 ? ' (بعد خصم ${_discountAmount.toStringAsFixed(0)} ر.س)' : ''}.'),
               const SizedBox(height: 8),
               const Text(
                 'فور تأكيد المعرض خلال ساعتين، افتح «متابعة حجزي» لاختيار (الفحص الشامل / الشحن / الاستلام المباشر) واستلام فاتورة المبايعة.',
@@ -428,19 +529,20 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                 child: Text(_inlineError!, style: const TextStyle(color: LuxuryColors.danger, fontSize: 12.5, fontWeight: FontWeight.w600)),
               ),
             if (_step == 0) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _nameCtrl.text = 'عبدالعزيز (مشتري تجريبي)';
-                      _phoneCtrl.text = '0550138323';
-                    });
-                  },
-                  icon: const Icon(Icons.flash_on, size: 16, color: LuxuryColors.gold),
-                  label: const Text('تعبئة سريعة للتجربة', style: TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 12)),
+              if (kDebugMode)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _nameCtrl.text = 'عبدالعزيز (مشتري تجريبي)';
+                        _phoneCtrl.text = '0550138323';
+                      });
+                    },
+                    icon: const Icon(Icons.flash_on, size: 16, color: LuxuryColors.gold),
+                    label: const Text('تعبئة سريعة للتجربة', style: TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 12)),
+                  ),
                 ),
-              ),
               TextField(controller: _nameCtrl, decoration: luxuryInput('الاسم الكامل', icon: Icons.person_outline)),
               const SizedBox(height: 12),
               TextField(controller: _phoneCtrl, keyboardType: TextInputType.phone, decoration: luxuryInput('رقم الجوال (05xxxxxxxx)', icon: Icons.phone_android)),
@@ -449,7 +551,9 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                 initialValue: _selectedCity,
                 decoration: luxuryInput('مدينتك الحالية', icon: Icons.location_city),
                 items: _saudiCities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                onChanged: (v) { if (v != null) setState(() => _selectedCity = v); },
+                onChanged: (v) {
+                  if (v != null) setState(() => _selectedCity = v);
+                },
               ),
               const SizedBox(height: 18),
               SizedBox(
@@ -462,25 +566,26 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                 ),
               ),
             ] else if (_step == 1) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                margin: const EdgeInsets.only(bottom: 14),
-                decoration: BoxDecoration(color: LuxuryColors.goldSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: LuxuryColors.gold)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('كود التجربة: $_generatedOtp', style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 15)),
-                    TextButton(
-                      onPressed: () {
-                        _otpCtrl.text = _generatedOtp;
-                        _verifyOtp();
-                      },
-                      child: const Text('تعبئة وتأكيد فوري', style: TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800)),
-                    ),
-                  ],
+              if (kDebugMode)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(color: LuxuryColors.goldSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: LuxuryColors.gold)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('كود التجربة: $_generatedOtp', style: const TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800, fontSize: 15)),
+                      TextButton(
+                        onPressed: () {
+                          _otpCtrl.text = _generatedOtp;
+                          _verifyOtp();
+                        },
+                        child: const Text('تعبئة وتأكيد فوري', style: TextStyle(color: LuxuryColors.navy, fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               TextField(
                 controller: _otpCtrl,
                 keyboardType: TextInputType.number,
@@ -512,7 +617,9 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                         initialValue: _salaryBank,
                         decoration: luxuryInput('البنك الذي ينزل عليه الراتب', icon: Icons.account_balance_outlined),
                         items: _banks.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
-                        onChanged: (v) { if (v != null) setState(() => _salaryBank = v); },
+                        onChanged: (v) {
+                          if (v != null) setState(() => _salaryBank = v);
+                        },
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -522,7 +629,9 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                               initialValue: _workSector,
                               decoration: luxuryInput('قطاع العمل'),
                               items: _sectors.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                              onChanged: (v) { if (v != null) setState(() => _workSector = v); },
+                              onChanged: (v) {
+                                if (v != null) setState(() => _workSector = v);
+                              },
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -558,9 +667,19 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('عربون الحجز (${PricingRules.tierLabel(widget.carPrice)})', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                        Text('$_reservationFee ر.س', style: const TextStyle(color: LuxuryColors.gold, fontSize: 18, fontWeight: FontWeight.w800)),
+                        Text('$_finalFee ر.س', style: const TextStyle(color: LuxuryColors.gold, fontSize: 18, fontWeight: FontWeight.w800)),
                       ],
                     ),
+                    if (_discountAmount > 0) ...[
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'تم تطبيق كود $_appliedCoupon بخصم ${_discountAmount.toStringAsFixed(0)} ر.س (الأصل $_reservationFee ر.س)',
+                          style: const TextStyle(color: LuxuryColors.gold, fontSize: 11.5, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     const Align(
                       alignment: Alignment.centerRight,
@@ -570,6 +689,41 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                 ),
               ),
               const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _couponCtrl,
+                      decoration: luxuryInput('لديك كود خصم؟ (مثال: VIP20)', icon: Icons.local_offer_outlined),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 50,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: LuxuryColors.navy,
+                        side: const BorderSide(color: LuxuryColors.gold),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _checkingCoupon ? null : _applyCoupon,
+                      child: Text(_checkingCoupon ? '...' : 'تطبيق', style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                ],
+              ),
+              if (_couponMsg != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  _couponMsg!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _couponValid ? LuxuryColors.success : LuxuryColors.danger,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
               _chipGroup('وسيلة الدفع', _gateways, _paymentGateway, (v) => setState(() => _paymentGateway = v)),
               const SizedBox(height: 12),
               Container(
@@ -578,17 +732,20 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _antiBypassAgreed ? LuxuryColors.gold : LuxuryColors.danger.withValues(alpha: 0.4)),
                 ),
-                child: Material(color: Colors.transparent, child: CheckboxListTile(
-                  value: _antiBypassAgreed,
-                  activeColor: LuxuryColors.navy,
-                  checkColor: LuxuryColors.gold,
-                  title: const Text('إقرار الأمانة وحفظ الحقوق (إلزامي)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
-                  subtitle: const Text(
-                    'أقرّ بأن مجرد رؤيتي للسيارة ومعرفة المعرض عبر «معرضي» لا يُعفيني من العربون، وألتزم بإتمام الحجز داخل التطبيق. كما أقرّ بأن «معرضي» وسيط تقني موثّق فقط (المسؤولية الفنية على الفاحص والتجارية على المعرض والنقل على السطحة)، وأن لي نافذة اعتراض 24 ساعة (أو 50 كم) بعد الاستلام. وفي حال تراجعي بدون عيب بعد تأكيد المعرض وتجميد السيارة لا يُسترد العربون تعويضاً عن تعطيل البيع.',
-                    style: TextStyle(fontSize: 11.5, color: LuxuryColors.textPrimary, height: 1.4),
+                child: Material(
+                  color: Colors.transparent,
+                  child: CheckboxListTile(
+                    value: _antiBypassAgreed,
+                    activeColor: LuxuryColors.navy,
+                    checkColor: LuxuryColors.gold,
+                    title: const Text('إقرار الأمانة وحفظ الحقوق (إلزامي)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                    subtitle: const Text(
+                      'أقرّ بأن مجرد رؤيتي للسيارة ومعرفة المعرض عبر «معرضي» لا يُعفيني من العربون، وألتزم بإتمام الحجز داخل التطبيق. كما أقرّ بأن «معرضي» وسيط تقني موثّق فقط (المسؤولية الفنية على الفاحص والتجارية على المعرض والنقل على السطحة)، وأن لي نافذة اعتراض 24 ساعة (أو 50 كم) بعد الاستلام. وفي حال تراجعي بدون عيب بعد تأكيد المعرض وتجميد السيارة لا يُسترد العربون تعويضاً عن تعطيل البيع.',
+                      style: TextStyle(fontSize: 11.5, color: LuxuryColors.textPrimary, height: 1.4),
+                    ),
+                    onChanged: (v) => setState(() => _antiBypassAgreed = v ?? false),
                   ),
-                  onChanged: (v) => setState(() => _antiBypassAgreed = v ?? false),
-                )),
+                ),
               ),
               const SizedBox(height: 14),
               SizedBox(
@@ -598,7 +755,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                   style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   onPressed: _saving ? null : _confirmDepositAndCreateOrder,
                   icon: const Icon(Icons.lock_outline, size: 18),
-                  label: Text(_saving ? 'جاري التأكيد...' : 'ادفع $_reservationFee ر.س وأكّد الحجز الآن', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  label: Text(_saving ? 'جاري التأكيد...' : 'ادفع $_finalFee ر.س وأكّد الحجز الآن', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                 ),
               ),
             ],

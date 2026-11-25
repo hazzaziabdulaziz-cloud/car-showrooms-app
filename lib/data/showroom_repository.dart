@@ -94,6 +94,7 @@ class ShowroomModel {
   final String contactPhone;
   final String bankName;
   final String iban;
+  final String ibanCertUrl;
   final bool isVerified;
   final bool isPrimeSpot;
   final double rating;
@@ -109,6 +110,7 @@ class ShowroomModel {
     required this.contactPhone,
     required this.bankName,
     required this.iban,
+    this.ibanCertUrl = '',
     required this.isVerified,
     required this.isPrimeSpot,
     required this.rating,
@@ -127,6 +129,7 @@ class ShowroomModel {
       contactPhone: (data['contact_phone'] ?? '').toString(),
       bankName: (data['bank_name'] ?? '').toString(),
       iban: (data['iban'] ?? '').toString(),
+      ibanCertUrl: (data['iban_cert_url'] ?? '').toString(),
       isVerified: data['is_verified'] == true,
       isPrimeSpot: data['is_prime_spot'] == true,
       rating: (data['rating'] is num) ? (data['rating'] as num).toDouble() : 4.8,
@@ -151,6 +154,7 @@ class CarListingModel {
   final bool isShowroomVerified;
   final String status;
   final bool hasBackhaulTow;
+  final List<String> imageUrls;
 
   const CarListingModel({
     required this.id,
@@ -169,6 +173,7 @@ class CarListingModel {
     required this.isShowroomVerified,
     required this.status,
     required this.hasBackhaulTow,
+    this.imageUrls = const [],
   });
 
   factory CarListingModel.fromDoc(DocumentSnapshot doc) {
@@ -190,6 +195,7 @@ class CarListingModel {
       isShowroomVerified: data['is_showroom_verified'] == true,
       status: (data['status'] ?? 'available').toString(),
       hasBackhaulTow: data['has_backhaul_tow'] == true,
+      imageUrls: (data['image_urls'] is List) ? (data['image_urls'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty).toList() : const [],
     );
   }
 
@@ -360,6 +366,7 @@ class ShowroomRepository {
     required String contactPhone,
     required String bankName,
     required String iban,
+    String ibanCertUrl = '',
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception('يجب تسجيل الدخول أولاً.');
@@ -367,13 +374,15 @@ class ShowroomRepository {
       'owner_uid': uid,
       'bank_name': SecurityGuard.sanitizeText(bankName, maxLength: 60),
       'iban': iban.replaceAll(RegExp(r'\s+'), '').toUpperCase(),
+      'iban_cert_url': ibanCertUrl,
       'commercial_name': SecurityGuard.sanitizeText(commercialName, maxLength: 90),
       'cr_number': SecurityGuard.sanitizeText(crNumber, maxLength: 10),
       'region_id': regionId,
       'city_hub': SecurityGuard.sanitizeText(cityHub, maxLength: 90),
       'national_address': SecurityGuard.sanitizeText(nationalAddress, maxLength: 12),
       'contact_phone': SecurityGuard.sanitizeText(contactPhone, maxLength: 15),
-      'is_verified': true,
+      'is_verified': false,
+      'status': 'pending_review',
       'is_prime_spot': false,
       'rating': 5.0,
       'created_at': FieldValue.serverTimestamp(),
@@ -421,6 +430,7 @@ class ShowroomRepository {
     required String bodyCondition,
     required String specType,
     required bool hasBackhaulTow,
+    List<String> imageUrls = const [],
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception('يجب تسجيل الدخول أولاً.');
@@ -441,9 +451,18 @@ class ShowroomRepository {
       'is_showroom_verified': true,
       'status': 'available',
       'has_backhaul_tow': hasBackhaulTow,
+      'image_urls': imageUrls,
       'created_at': FieldValue.serverTimestamp(),
     });
     return docRef.id;
+  }
+
+  Future<void> updateCarStatus(String carId, String status) async {
+    await _firestore.collection('cars').doc(carId).update({'status': status});
+  }
+
+  Future<void> deleteCar(String carId) async {
+    await _firestore.collection('cars').doc(carId).delete();
   }
 
   Future<TxResult> createOrder({

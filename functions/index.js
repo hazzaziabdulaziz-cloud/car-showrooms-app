@@ -7,10 +7,17 @@ admin.initializeApp();
 const db = admin.firestore();
 const REGION = "me-central2";
 
-// 1. حجز آمن بـ Transaction لمنع الحجز المزدوج (Race Condition) وحساب الرسوم في السيرفر
+function calcReservationFee(carPrice) {
+  if (!carPrice || carPrice <= 0) return 150;
+  if (carPrice >= 250000) return 500;
+  if (carPrice >= 100000) return 300;
+  return 150;
+}
+
+// 1. حجز آمن بـ Transaction لمنع الحجز المزدوج (Race Condition)
 exports.createReservationAtomic = onCall({ region: REGION }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const { carId, buyerName, buyerPhone, buyerCity } = request.data;
+  const { carId, buyerName, buyerPhone, buyerCity, paymentMethod, paymentGateway } = request.data || {};
   if (!carId) throw new HttpsError("invalid-argument", "معرف السيارة مطلوب.");
 
   const carRef = db.collection("cars").doc(carId);
@@ -25,42 +32,54 @@ exports.createReservationAtomic = onCall({ region: REGION }, async (request) => 
     }
 
     const now = admin.firestore.Timestamp.now();
-    const slaExpiresAt = admin.firestore.Timestamp.fromMillis(now.toMillis() + 2 * 60 * 60 * 1000);
+    const slaDeadline = admin.firestore.Timestamp.fromMillis(now.toMillis() + 2 * 60 * 60 * 1000);
+    const fee = calcReservationFee(Number(car.price || 0));
+    const orderCode = `MRD-${Math.floor(100000 + Math.random() * 900000)}`;
+    const handoverPin = String(Math.floor(1000 + Math.random() * 9000));
+    const cleanPhone = String(buyerPhone || "").replace(/\D/g, "");
+    const phoneLast4 = cleanPhone.slice(-4);
 
     tx.update(carRef, { status: "reserved", reserved_by: request.auth.uid, reserved_at: now });
     tx.set(orderRef, {
-      order_code: `MRD-${Math.floor(100000 + Math.random() * 900000)}`,
+      order_code: orderCode,
+      handover_pin: handoverPin,
       car_id: carId,
-      car_title: car.title || "",
-      car_price: car.price || 0,
+      car_title: `${car.make || ""} ${car.model || ""} ${car.year || ""}`.trim(),
+      car_price: Number(car.price || 0),
       showroom_id: car.showroom_id || "",
+      showroom_name: car.showroom_name || "معرض معتمد",
       showroom_owner_uid: car.owner_uid || "",
       region_id: car.region_id || "riyadh",
       buyer_uid: request.auth.uid,
       buyer_name: buyerName || "",
-      buyer_phone: buyerPhone || "",
+      buyer_phone: cleanPhone,
+      buyer_phone_last4: phoneLast4,
       buyer_city: buyerCity || "الرياض",
-      deposit_amount: 300,
-      inspection_fee: 250,
-      inspection_platform_commission: 50,
-      towing_commission_rate: 0.10,
-      status: "pending_showroom",
-      sla_expires_at: slaExpiresAt,
+      payment_method: paymentMethod || "شراء كاش (قيمة السيارة)",
+      payment_gateway: paymentGateway || "مدى (Mada)",
+      reservation_fee: fee,
+      total_paid: fee,
+      escrow_protected: true,
+      inspection_status: "none",
+      shipping_status: "none",
+      invoice_issued: false,
+      status: "paid_waiting_showroom",
+      sla_deadline: slaDeadline,
+      sla_expires_at: slaDeadline,
       created_at: now,
     });
 
-    return { orderId: orderRef.id };
+    return { orderId: orderRef.id, orderCode, handoverPin, reservationFee: fee };
   });
 });
 
-// 2. المؤقت الآلي كل 15 دقيقة: إلغاء مهلة الساعتين للمعرض + تحرير ضمان الفاحص بعد 48 ساعة
+// 2. المؤقت الآلي كل 15 دقيقة: إلغاء مهلة الساعتين + تحرير ضمان الفاحص بعد 48 ساعة
 exports.scheduledOrderMaintenance = onSchedule({ schedule: "every 15 minutes", region: REGION }, async () => {
   const now = admin.firestore.Timestamp.now();
 
-  // أ) إلغاء الطلبات التي تجاوزت مهلة الساعتين بدون رد المعرض
   const expiredShowroom = await db.collection("orders")
-    .where("status", "==", "pending_showroom")
-    .where("sla_expires_at", "<=", now)
+    .where("status", "in", ["paid_waiting_showroom", "pending_showroom"])
+    .where("sla_deadline", "<=", now)
     .limit(50)
     .get();
 
@@ -71,7 +90,6 @@ exports.scheduledOrderMaintenance = onSchedule({ schedule: "every 15 minutes", r
     }
   }
 
-  // ب) تحرير مستحقات الفاحص بعد 48 ساعة إذا لم يُفتح نزاع
   const cutoff48h = admin.firestore.Timestamp.fromMillis(now.toMillis() - 48 * 60 * 60 * 1000);
   const readyEscrow = await db.collection("orders")
     .where("inspector_payout_status", "==", "escrow_held")
@@ -102,7 +120,7 @@ exports.onOrderNotification = onDocumentWritten({ document: "orders/{orderId}", 
   } catch (_) {}
 });
 
-// 4. مولّد رمز QR للفوترة الإلكترونية (ZATCA TLV Base64) لعمولات المنصة
+// 4. مولّد رمز QR للفوترة الإلكترونية (ZATCA TLV Base64)
 function generateZatcaQrBase64(sellerName, vatNumber, timestampIso, totalWithVat, vatAmount) {
   const tlv = (tag, val) => {
     const buf = Buffer.from(String(val), "utf8");
@@ -117,15 +135,22 @@ function generateZatcaQrBase64(sellerName, vatNumber, timestampIso, totalWithVat
   ]).toString("base64");
 }
 
-// 5. Webhook لبوابة الدفع المرخصة (Moyasar / Tap / HyperPay Split Payments)
+// 5. Webhook محمي بتوقيع سري لبوابة الدفع (Moyasar / Tap / HyperPay)
 exports.paymentSplitWebhook = onRequest({ region: REGION }, async (req, res) => {
+  if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+  const expectedSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+  const providedSecret = req.get("x-webhook-secret");
+  if (!expectedSecret || providedSecret !== expectedSecret) {
+    return res.status(401).json({ ok: false, error: "unauthorized_webhook" });
+  }
+
   const { orderId, status, commissionTotal } = req.body || {};
   if (!orderId || status !== "paid") return res.status(400).send("ignored");
 
   const vat = (Number(commissionTotal || 50) * 15) / 115;
   const qr = generateZatcaQrBase64(
     "منصة معرضي للوساطة التقنية",
-    "300000000000003", // يُستبدل بالرقم الضريبي الفعلي عند الإطلاق
+    process.env.ZATCA_VAT_NUMBER || "300000000000003",
     new Date().toISOString(),
     commissionTotal || 50,
     vat

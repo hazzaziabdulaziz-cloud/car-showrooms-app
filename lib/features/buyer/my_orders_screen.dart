@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../core/account_deletion_service.dart';
+import '../../core/luxury_theme.dart';
+import 'order_tracking_sheet.dart';
 
 class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key});
@@ -13,8 +15,32 @@ class MyOrdersScreen extends StatefulWidget {
 class _MyOrdersScreenState extends State<MyOrdersScreen> {
   int _pageLimit = 20;
 
+  String _statusArabic(String status) {
+    switch (status) {
+      case 'paid_waiting_showroom':
+      case 'pending_showroom':
+        return 'بانتظار تأكيد المعرض (مهلة ساعتين)';
+      case 'confirmed':
+        return 'تم تأكيد التوفر ✓ — اختر الفحص أو السطحة';
+      case 'path_selected':
+        return 'جاري تنفيذ المسار المختار';
+      case 'completed':
+        return 'مكتمل — تم التسليم ✓';
+      case 'sold_in_showroom_refunded':
+        return 'انباعت في الصالة — استُرجع العربون';
+      case 'cancelled_by_buyer':
+      case 'cancelled_by_buyer_after_inspection':
+        return 'ملغى من المشتري';
+      case 'expired_no_showroom_reply':
+        return 'انتهت مهلة المعرض — استرجاع تلقائي';
+      default:
+        return status;
+    }
+  }
+
   Future<void> _cancelOrder(String docId, String currentStatus) async {
-    final refundPolicy = currentStatus == 'pending_showroom'
+    final waitingShowroom = currentStatus == 'paid_waiting_showroom' || currentStatus == 'pending_showroom';
+    final refundPolicy = waitingShowroom
         ? 'سيتم استرداد العربون كاملاً لعدم تأكيد المعرض بعد.'
         : 'سيتم إلغاء الطلب ومعالجة الاسترداد وفق سياسة المنصة (مع خصم رسوم الفحص إن تم تنفيذه).';
 
@@ -26,7 +52,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('تراجع')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB42318), foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: LuxuryColors.danger, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('إلغاء الطلب'),
           ),
@@ -54,19 +80,20 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
             TextField(
               controller: odometerCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'قراءة العداد الحالية (كم)', border: OutlineInputBorder()),
+              decoration: luxuryInput('قراءة العداد الحالية (كم)'),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: reasonCtrl,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: 'وصف العيب أو الاختلاف عن تقرير الفحص', border: OutlineInputBorder()),
+              decoration: luxuryInput('وصف العيب أو الاختلاف عن تقرير الفحص'),
             ),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: LuxuryColors.danger, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('رفع النزاع وتجميد الضمان'),
           ),
@@ -106,20 +133,24 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(5, (i) {
                   return IconButton(
-                    icon: Icon(i < stars ? Icons.star : Icons.star_border, color: const Color(0xFFC5A059), size: 32),
+                    icon: Icon(i < stars ? Icons.star : Icons.star_border, color: LuxuryColors.gold, size: 32),
                     onPressed: () => setS(() => stars = i + 1),
                   );
                 }),
               ),
               TextField(
                 controller: noteCtrl,
-                decoration: const InputDecoration(labelText: 'ملاحظاتك عن المعرض / الفاحص / السطحة', border: OutlineInputBorder()),
+                decoration: luxuryInput('ملاحظاتك عن المعرض / الفاحص / السطحة'),
               ),
             ],
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إرسال التقييم')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('إرسال التقييم'),
+            ),
           ],
         ),
       ),
@@ -141,15 +172,35 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('حجوزاتي')),
+        backgroundColor: LuxuryColors.background,
+        appBar: AppBar(
+          backgroundColor: LuxuryColors.navy,
+          foregroundColor: Colors.white,
+          title: const Text('حجوزاتي'),
+          actions: [
+            TextButton.icon(
+              onPressed: () => OrderTrackingSheet.show(context),
+              icon: const Icon(Icons.search, color: LuxuryColors.gold, size: 18),
+              label: const Text('تتبع برقم الحجز', style: TextStyle(color: LuxuryColors.gold, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
         body: const Center(child: Text('يرجى تسجيل الدخول لمتابعة حجوزاتك وتقارير الفحص.')),
       );
     }
 
     return Scaffold(
+      backgroundColor: LuxuryColors.background,
       appBar: AppBar(
-        title: const Text('حجوزاتي'),
+        backgroundColor: LuxuryColors.navy,
+        foregroundColor: Colors.white,
+        title: const Text('حجوزاتي ومتابعة الطلبات', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16.5)),
         actions: [
+          IconButton(
+            tooltip: 'تتبع برقم الحجز',
+            icon: const Icon(Icons.qr_code_scanner, color: LuxuryColors.gold),
+            onPressed: () => OrderTrackingSheet.show(context),
+          ),
           IconButton(
             tooltip: 'حذف الحساب (PDPL)',
             icon: const Icon(Icons.delete_forever_outlined),
@@ -172,66 +223,111 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
           if (docs.isEmpty) {
             return const Center(child: Text('لا توجد حجوزات مرتبطة بحسابك حالياً.'));
           }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length + 1,
-            itemBuilder: (context, i) {
-              if (i == docs.length) {
-                return docs.length >= _pageLimit
-                    ? TextButton(
-                        onPressed: () => setState(() => _pageLimit += 20),
-                        child: const Text('تحميل المزيد من الحجوزات'),
-                      )
-                    : const SizedBox.shrink();
-              }
-              final d = (docs[i].data() as Map<String, dynamic>?) ?? {};
-              final id = docs[i].id;
-              final code = (d['order_code'] ?? id).toString();
-              final car = (d['car_title'] ?? 'سيارة').toString();
-              final status = (d['status'] ?? 'pending_showroom').toString();
-              final showroomName = (d['showroom_name'] ?? 'المعرض').toString();
-              final rated = d['buyer_rated'] == true;
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: docs.length + 1,
+                itemBuilder: (context, i) {
+                  if (i == docs.length) {
+                    return docs.length >= _pageLimit
+                        ? TextButton(
+                            onPressed: () => setState(() => _pageLimit += 20),
+                            child: const Text('تحميل المزيد من الحجوزات'),
+                          )
+                        : const SizedBox.shrink();
+                  }
+                  final d = (docs[i].data() as Map<String, dynamic>?) ?? {};
+                  final id = docs[i].id;
+                  final code = (d['order_code'] ?? id).toString();
+                  final car = (d['car_title'] ?? 'سيارة').toString();
+                  final status = (d['status'] ?? 'paid_waiting_showroom').toString();
+                  final showroomName = (d['showroom_name'] ?? 'المعرض').toString();
+                  final phoneLast4 = (d['buyer_phone_last4'] ?? '').toString();
+                  final pin = (d['handover_pin'] ?? '---').toString();
+                  final rated = d['buyer_rated'] == true;
+                  final canCancel = status == 'paid_waiting_showroom' || status == 'pending_showroom' || status == 'confirmed';
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('$code · $car', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                      const SizedBox(height: 4),
-                      Text('الحالة: $status'),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (status == 'pending_showroom' || status == 'confirmed')
-                            OutlinedButton.icon(
-                              icon: const Icon(Icons.cancel_outlined, size: 16),
-                              label: const Text('إلغاء الحجز'),
-                              onPressed: () => _cancelOrder(id, status),
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: LuxuryColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: LuxuryColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text('$code · $car', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5, color: LuxuryColors.navy)),
                             ),
-                          if (status == 'completed' && d['dispute_status'] != 'open')
-                            OutlinedButton.icon(
-                              icon: const Icon(Icons.gavel_outlined, size: 16),
-                              label: const Text('فتح نزاع (24س/50كم)'),
-                              onPressed: () => _openDisputeDialog(id, code),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: LuxuryColors.goldSoft, borderRadius: BorderRadius.circular(8)),
+                              child: Text('كود التسليم: $pin', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                             ),
-                          if (status == 'completed' && !rated)
-                            ElevatedButton.icon(
-                              icon: const Icon(Icons.star_outline, size: 16),
-                              label: const Text('تقييم الصفقة'),
-                              onPressed: () => _openRatingDialog(id, showroomName),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text('المعرض: $showroomName', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
+                        const SizedBox(height: 4),
+                        Text(
+                          _statusArabic(status),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: status == 'completed' ? LuxuryColors.success : LuxuryColors.navy,
+                          ),
+                        ),
+                        const Divider(height: 20),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
+                              icon: const Icon(Icons.track_changes_outlined, size: 16),
+                              label: const Text('متابعة التفاصيل / الفحص / السطحة', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
+                              onPressed: () => OrderTrackingSheet.show(
+                                context,
+                                initialOrderCode: code,
+                                initialPhoneLast4: phoneLast4,
+                              ),
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+                            if (canCancel)
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.danger, side: const BorderSide(color: LuxuryColors.danger)),
+                                icon: const Icon(Icons.cancel_outlined, size: 16),
+                                label: const Text('إلغاء الحجز'),
+                                onPressed: () => _cancelOrder(id, status),
+                              ),
+                            if (status == 'completed' && d['dispute_status'] != 'open')
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.gavel_outlined, size: 16),
+                                label: const Text('فتح نزاع (24س/50كم)'),
+                                onPressed: () => _openDisputeDialog(id, code),
+                              ),
+                            if (status == 'completed' && !rated)
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy),
+                                icon: const Icon(Icons.star_outline, size: 16),
+                                label: const Text('تقييم الصفقة'),
+                                onPressed: () => _openRatingDialog(id, showroomName),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
           );
         },
       ),
