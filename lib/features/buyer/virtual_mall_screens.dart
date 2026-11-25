@@ -822,7 +822,7 @@ class CarDetailsScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text('حالة البودي: $body · العداد: $mileage كم', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    Text('• رقم المعرض المباشر محجوب لحماية حقوق الطرفين، ويُفتح فوراً بعد دفع عربون الجدية ($fee ر.س — يُخصم من قيمة السيارة).', style: const TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
+                    Text('• رقم المعرض المباشر محجوب لحماية حقوق الطرفين، ويُفتح فوراً بعد دفع عربون الجدية ($fee ر.س رسوم حجز وضمان لصالح منصة «معرضي» — مستردة 100% عند عدم التوفر أو وجود عيب).', style: const TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
                     const SizedBox(height: 6),
                     const Text('• التجميد الذكي: يبدأ التجميد بعد تأكيد المعرض (4 ساعات داخل نفس المدينة، و24 ساعة لخارج المنطقة).', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
                     const SizedBox(height: 6),

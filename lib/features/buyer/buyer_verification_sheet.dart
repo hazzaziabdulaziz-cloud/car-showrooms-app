@@ -684,7 +684,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                     const SizedBox(height: 6),
                     const Align(
                       alignment: Alignment.centerRight,
-                      child: Text('يُخصم بالكامل من قيمة السيارة · مسترد 100% في حال عدم توفر السيارة', style: TextStyle(color: Colors.white70, fontSize: 11.5)),
+                      child: Text('رسوم حجز وضمان لصالح منصة «معرضي» عند إتمام البيعة · مستردة 100% في حال عدم توفر السيارة أو وجود عيب في الفحص', style: TextStyle(color: Colors.white70, fontSize: 11.5)),
                     ),
                   ],
                 ),

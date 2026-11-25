@@ -115,7 +115,7 @@ class _AccountingSubTab extends StatelessWidget {
   String _categoryArabic(String cat) {
     switch (cat) {
       case 'car_booking':
-        return 'عربون سيارة (أمانة للمعرض)';
+        return 'رسوم حجز سيارة (إيراد منصة 100% عند إتمام البيعة)';
       case 'inspection':
         return 'فحص شامل (20% إيراد منصة · 80% أمانة فاحص)';
       case 'flatbed':
@@ -212,8 +212,10 @@ class _AccountingSubTab extends StatelessWidget {
             } else if (cat == 'flatbed') {
               platformRevenue += amt * 0.20;
               escrowBalance += amt * 0.80;
+            } else if (cat == 'car_booking') {
+              // رسوم الحجز إيراد كامل للمنصة عند إتمام البيعة
+              platformRevenue += amt;
             } else {
-              // عربون سيارة يُحفظ كأمانة للمعرض
               escrowBalance += amt;
             }
           } else {
@@ -240,7 +242,7 @@ class _AccountingSubTab extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              'ملاحظة محاسبية: 80% من السطحة و80% من الفحص وعربون السيارة تُقيّد كأمانات للشركاء ولا تُحسب إيراداً للمنصة.',
+              'ملاحظة محاسبية: رسوم الحجز والاشتراكات + 20% فحص + 20% سطحة = إيراد المنصة الصافي، بينما 80% فحص و80% سطحة تُقيّد كأمانات للشركاء.',
               style: TextStyle(fontSize: 11.5, color: LuxuryColors.textSecondary),
             ),
             const SizedBox(height: 12),

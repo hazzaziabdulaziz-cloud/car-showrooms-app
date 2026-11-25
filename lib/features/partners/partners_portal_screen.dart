@@ -378,7 +378,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
               _gatewayCard(
                 id: 'showroom',
                 icon: Icons.storefront_outlined,
-                title: 'معرض سيارات',
+                title: 'صاحب معرض أو وكالة',
                 subtitle: 'سجّل معرضك بشهادة الآيبان، أضف سياراتك بالصور وملصق QR، وتابع حجوزات المشترين.',
               ),
               const SizedBox(height: 14),
@@ -402,7 +402,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
     }
 
     final gwTitle = _selectedGateway == 'showroom'
-        ? 'بوابة معارض السيارات'
+        ? 'بوابة المعارض والوكالات'
         : (_selectedGateway == 'inspector' ? 'بوابة الفاحصين المعتمدين' : 'بوابة أصحاب السطحات');
 
     return Align(
@@ -546,7 +546,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
 
   Widget _buildPreviewRolePortal(String pType, User? user) {
     final title = pType == 'showroom'
-        ? 'معاينة: لوحة تحكم المعرض'
+        ? 'معاينة: لوحة المعرض / الوكالة'
         : (pType == 'inspector' ? 'معاينة: لوحة تحكم الفاحص' : 'معاينة: لوحة تحكم صاحب السطحة');
     final isAdmin = isAdminEmail(user?.email);
     return Align(
@@ -854,7 +854,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
 
   Widget _buildIsolatedRolePortal(User user, String pType) {
     final title = pType == 'showroom'
-        ? 'لوحة تحكم المعرض'
+        ? 'لوحة تحكم المعرض / الوكالة'
         : (pType == 'inspector' ? 'لوحة تحكم الفاحص المعتمد' : 'لوحة تحكم كابتن السطحة');
     return Align(
       alignment: Alignment.topCenter,
@@ -1037,7 +1037,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('الخطوة 1: تسجيل وتوثيق معرضك', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+            const Text('الخطوة 1: تسجيل وتوثيق معرضك أو وكالتك', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
             const SizedBox(height: 4),
             const Text('أرفق شهادة الآيبان من تطبيق بنكك لمطابقتها مع السجل التجاري وتفعيل شارة التوثيق مجاناً.', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
             const SizedBox(height: 18),
@@ -1046,7 +1046,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _srNameCtrl,
-                    decoration: luxuryInput('الاسم التجاري للمعرض'),
+                    decoration: luxuryInput('الاسم التجاري للمعرض أو الوكالة'),
                     validator: (v) => SecurityGuard.validateRequiredText(v, 'اسم المعرض'),
                   ),
                 ),
@@ -1561,7 +1561,6 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 items: const [
                   DropdownMenuItem(value: 'اعتذار من المعرض / عدم توفر السيارة (استرداد العربون 100%)', child: Text('اعتذار من المعرض (استرداد العربون 100%)')),
                   DropdownMenuItem(value: 'رفض التمويل البنكي أو عدم استكمال الإجراءات', child: Text('رفض التمويل البنكي أو عدم استكمال الإجراءات')),
-                  DropdownMenuItem(value: 'تراجع المشتري بعد التأكيد (وفق سياسة العربون)', child: Text('تراجع المشتري بعد التأكيد')),
                 ],
                 onChanged: (v) { if (v != null) setS(() => reason = v); },
               ),
@@ -1863,7 +1862,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                                 }
                                 await doc.reference.update({
                                   'invoice_issued': true,
-                                  'remaining_amount': price > dep ? (price - dep) : price,
+                                  'remaining_amount': price,
                                   'showroom_bank': srBank,
                                   'showroom_iban': srIban,
                                 });
@@ -2121,7 +2120,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   Widget _buildInspectorTasksList() {
     final activeRegionName = findRegion(_inspRegionId).nameAr;
     return StreamBuilder(
-      stream: FirebaseFirestore.instance.collection('orders').where('inspection_status', isEqualTo: 'pending_inspector').snapshots(),
+      stream: FirebaseFirestore.instance.collection('orders').where('inspection_status', whereIn: ['pending_inspector', 'inspector_accepted']).snapshots(),
       builder: (context, snap) {
         final docs = (snap.data?.docs ?? const [])
             .where((doc) => (doc.data()['region_id'] ?? 'riyadh').toString() == _inspRegionId)
@@ -2175,17 +2174,39 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            FilledButton.icon(
-                              style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
-                              onPressed: () => InspectionReportSheet.show(
-                                context,
-                                orderRef: doc.reference,
-                                orderCode: (d['order_code'] ?? '').toString(),
-                                carTitle: (d['car_title'] ?? '').toString(),
+                            if ((d['inspection_status'] ?? '') == 'pending_inspector')
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy),
+                                onPressed: () async {
+                                  final deadline = DateTime.now().add(const Duration(hours: 24));
+                                  await doc.reference.update({
+                                    'inspection_status': 'inspector_accepted',
+                                    'inspector_uid': FirebaseAuth.instance.currentUser?.uid ?? '',
+                                    'inspection_accepted_at': FieldValue.serverTimestamp(),
+                                    'inspection_deadline_at': Timestamp.fromDate(deadline),
+                                    'inspector_late_penalty_sar': 50,
+                                  });
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(backgroundColor: LuxuryColors.navy, content: Text('تم قبول المهمة — لديك 24 ساعة لرفع التقرير (يُخصم 50 ر.س عند التأخير).')),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.check_circle_outline, size: 17),
+                                label: const Text('قبول المهمة (مهلة 24س · خصم 50 ر.س للتأخير)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                              )
+                            else
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
+                                onPressed: () => InspectionReportSheet.show(
+                                  context,
+                                  orderRef: doc.reference,
+                                  orderCode: (d['order_code'] ?? '').toString(),
+                                  carTitle: (d['car_title'] ?? '').toString(),
+                                ),
+                                icon: const Icon(Icons.assignment_outlined, size: 17),
+                                label: const Text('رفع التقرير الرسمي الآن', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
                               ),
-                              icon: const Icon(Icons.assignment_outlined, size: 17),
-                              label: const Text('رفع التقرير الرسمي', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
-                            ),
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
                               onPressed: () => _openShowroomInMaps(srName, rId),
@@ -2353,7 +2374,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                   activeColor: LuxuryColors.navy,
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
-                    'أتعهد أمام الله ثم أمام منصة «معرضي» بتصوير السيارة 4 صور واضحة قبل التحميل، وأقرّ بأن «معرضي» وسيط تقني فقط، وأتحمل كامل المسؤولية عن أي ضرر أثناء التحميل والنقل وحتى التسليم.',
+                    'أتعهد أمام الله ثم أمام منصة «معرضي» بتصوير السيارة 4 صور واضحة قبل التحميل، وأقرّ بأنني بمجرد قبول هذا الطلب أتحمل كامل المسؤولية النظامية والمالية عن أي مشكلة أو تأخير أو ضرر أو عطل يحدث للسيارة أثناء التحميل والنقل وحتى تسليمها للمشتري، مع إخلاء مسؤولية «معرضي» كوسيط تقني.',
                     style: TextStyle(fontSize: 12, height: 1.45, fontWeight: FontWeight.w600),
                   ),
                   onChanged: (v) => setDlgState(() => agreed = v ?? false),
