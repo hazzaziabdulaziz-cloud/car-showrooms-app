@@ -1,3 +1,5 @@
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/analytics_and_accounting_service.dart';
 import '../../core/showcase_seeder.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -2068,22 +2070,95 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
     );
   }
 
+  Future<void> _detectGpsRegion({required bool forInspector}) async {
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(backgroundColor: LuxuryColors.danger, content: Text('يرجى السماح بصلاحية الموقع لتحديد منطقتك تلقائياً.')),
+          );
+        }
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      RegionInfo nearest = kSaudiRegions.first;
+      double bestDist = double.infinity;
+      for (final r in kSaudiRegions) {
+        final d = Geolocator.distanceBetween(pos.latitude, pos.longitude, r.lat, r.lng);
+        if (d < bestDist) {
+          bestDist = d;
+          nearest = r;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        if (forInspector) {
+          _inspRegionId = nearest.id;
+        } else {
+          _towCurrentRegion = nearest.id;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: LuxuryColors.success, content: Text('تم تحديد منطقتك عبر GPS: ${nearest.nameAr} ✓')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تحديد الموقع: $e')));
+      }
+    }
+  }
+
+  Future<void> _openShowroomInMaps(String showroomName, String regionId) async {
+    final regionName = findRegion(regionId).nameAr;
+    final query = Uri.encodeComponent('$showroomName $regionName السعودية');
+    await launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=$query'), mode: LaunchMode.externalApplication);
+  }
+
   Widget _buildInspectorTasksList() {
+    final activeRegionName = findRegion(_inspRegionId).nameAr;
     return StreamBuilder(
       stream: FirebaseFirestore.instance.collection('orders').where('inspection_status', isEqualTo: 'pending_inspector').snapshots(),
       builder: (context, snap) {
-        final docs = snap.data?.docs ?? const [];
+        final docs = (snap.data?.docs ?? const [])
+            .where((doc) => (doc.data()['region_id'] ?? 'riyadh').toString() == _inspRegionId)
+            .toList();
         return _luxuryCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('مهام الفحص الواردة (أتعابك الصافية: 200 ر.س لكل فحص)', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text('مهام الفحص في منطقتك ($activeRegionName) · أتعابك: 200 ر.س', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
+                    onPressed: () => _detectGpsRegion(forInspector: true),
+                    icon: const Icon(Icons.gps_fixed, size: 16, color: LuxuryColors.gold),
+                    label: const Text('تحديد موقعي GPS', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _inspRegionId,
+                decoration: luxuryInput('منطقتك الحالية لاستقبال طلبات الفحص'),
+                items: kSaudiRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.nameAr))).toList(),
+                onChanged: (v) { if (v != null) setState(() => _inspRegionId = v); },
+              ),
               const Divider(height: 20),
               if (docs.isEmpty)
-                const Text('لا توجد طلبات فحص بانتظار التقرير حالياً.', style: TextStyle(color: LuxuryColors.textSecondary))
+                Text('لا توجد طلبات فحص جديدة في منطقة $activeRegionName حالياً.', style: const TextStyle(color: LuxuryColors.textSecondary))
               else
                 ...docs.map((doc) {
                   final d = doc.data();
+                  final srName = (d['showroom_name'] ?? 'المعرض').toString();
+                  final rId = (d['region_id'] ?? 'riyadh').toString();
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(12),
@@ -2093,19 +2168,31 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                       children: [
                         Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 14.5)),
                         const SizedBox(height: 4),
-                        Text('المعرض: ${d['showroom_name'] ?? '-'} · المنطقة: ${findRegion((d['region_id'] ?? 'riyadh').toString()).nameAr}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
-                        Text('المشتري: ${d['buyer_name'] ?? '-'} · حصة الفاحص: 200 ر.س (تُحجز 48 ساعة)', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: LuxuryColors.navy)),
+                        Text('المعرض: $srName · المنطقة: ${findRegion(rId).nameAr}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
+                        Text('المشتري: ${d['buyer_name'] ?? '-'} · أتعابك الصافية: 200 ر.س (تُحجز 48 ساعة)', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: LuxuryColors.navy)),
                         const SizedBox(height: 8),
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
-                          onPressed: () => InspectionReportSheet.show(
-                            context,
-                            orderRef: doc.reference,
-                            orderCode: (d['order_code'] ?? '').toString(),
-                            carTitle: (d['car_title'] ?? '').toString(),
-                          ),
-                          icon: const Icon(Icons.assignment_outlined, size: 18),
-                          label: const Text('فتح نموذج التقرير الرسمي + تعهد الأمانة', style: TextStyle(fontWeight: FontWeight.w800)),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
+                              onPressed: () => InspectionReportSheet.show(
+                                context,
+                                orderRef: doc.reference,
+                                orderCode: (d['order_code'] ?? '').toString(),
+                                carTitle: (d['car_title'] ?? '').toString(),
+                              ),
+                              icon: const Icon(Icons.assignment_outlined, size: 17),
+                              label: const Text('رفع التقرير الرسمي', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
+                            ),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
+                              onPressed: () => _openShowroomInMaps(srName, rId),
+                              icon: const Icon(Icons.location_on_outlined, size: 17, color: LuxuryColors.gold),
+                              label: const Text('موقع المعرض (خرائط)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2328,10 +2415,20 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
             children: [
               Icon(Icons.my_location, color: LuxuryColors.gold, size: 20),
               SizedBox(width: 8),
-              Text('مدينتك / منطقتك الحالية لاستقبال الطلبات', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              Expanded(child: Text('مدينتك / منطقتك الحالية لاستقبال الطلبات', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy))),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
+              onPressed: () => _detectGpsRegion(forInspector: false),
+              icon: const Icon(Icons.gps_fixed, size: 16, color: LuxuryColors.gold),
+              label: const Text('تحديد موقعي تلقائياً عبر GPS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -2356,50 +2453,63 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   }
 
   Widget _buildTowTasksList() {
+    final activeRegionName = findRegion(_towCurrentRegion).nameAr;
     return StreamBuilder(
       stream: FirebaseFirestore.instance.collection('orders').where('shipping_status', whereIn: ['pending_tow', 'in_transit']).snapshots(),
       builder: (context, snap) {
-        final docs = snap.data?.docs ?? const [];
+        final docs = (snap.data?.docs ?? const [])
+            .where((doc) => (doc.data()['region_id'] ?? 'riyadh').toString() == _towCurrentRegion)
+            .toList();
         return _luxuryCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('رحلات الشحن الواردة', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              Text('رحلات الشحن المتاحة في منطقتك ($activeRegionName)', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
               const Divider(height: 18),
               if (docs.isEmpty)
-                const Text('لا توجد رحلات شحن جديدة حالياً.', style: TextStyle(color: LuxuryColors.textSecondary))
+                Text('لا توجد رحلات شحن جديدة في منطقة $activeRegionName حالياً.', style: const TextStyle(color: LuxuryColors.textSecondary))
               else
                 ...docs.map((doc) {
                   final d = doc.data();
                   final st = (d['shipping_status'] ?? '').toString();
+                  final srName = (d['showroom_name'] ?? 'المعرض').toString();
+                  final rId = (d['region_id'] ?? 'riyadh').toString();
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: LuxuryColors.background, borderRadius: BorderRadius.circular(10)),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
-                              Text('التحميل من: ${d['showroom_name'] ?? '-'} (${findRegion((d['region_id'] ?? 'riyadh').toString()).nameAr}) ← التسليم إلى: ${d['buyer_city'] ?? '-'}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
-                              Text('المشتري: ${d['buyer_name'] ?? '-'} · صافي أرباحك: ${d['tow_driver_share'] ?? 520} ر.س', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
-                            ],
-                          ),
+                        Text('${d['order_code']} · ${d['car_title']}', style: const TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                        const SizedBox(height: 4),
+                        Text('التحميل من: $srName (${findRegion(rId).nameAr}) ← التسليم إلى: ${d['buyer_city'] ?? '-'}', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
+                        Text('المشتري: ${d['buyer_name'] ?? '-'} · صافي أرباحك: ${d['tow_driver_share'] ?? 520} ر.س', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (st == 'pending_tow')
+                              FilledButton(
+                                style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
+                                onPressed: () => _acceptTowWithPledge(doc.reference, doc.id, (d['order_code'] ?? '').toString(), (d['car_title'] ?? '').toString()),
+                                child: const Text('قبول + توثيق 4 صور', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                              )
+                            else
+                              FilledButton(
+                                style: FilledButton.styleFrom(backgroundColor: LuxuryColors.success),
+                                onPressed: () => TowingHandoverSheet.show(context, orderId: doc.id, phase: 'delivery'),
+                                child: const Text('توثيق التسليم (4 صور) ✓', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                              ),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
+                              onPressed: () => _openShowroomInMaps(srName, rId),
+                              icon: const Icon(Icons.location_on_outlined, size: 17, color: LuxuryColors.gold),
+                              label: const Text('موقع المعرض (خرائط Google)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                            ),
+                          ],
                         ),
-                        if (st == 'pending_tow')
-                          FilledButton(
-                            style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold),
-                            onPressed: () => _acceptTowWithPledge(doc.reference, doc.id, (d['order_code'] ?? '').toString(), (d['car_title'] ?? '').toString()),
-                            child: const Text('قبول + توثيق 4 صور', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-                          )
-                        else
-                          FilledButton(
-                            style: FilledButton.styleFrom(backgroundColor: LuxuryColors.success),
-                            onPressed: () => TowingHandoverSheet.show(context, orderId: doc.id, phase: 'delivery'),
-                            child: const Text('توثيق التسليم (4 صور) ✓', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-                          ),
                       ],
                     ),
                   );
