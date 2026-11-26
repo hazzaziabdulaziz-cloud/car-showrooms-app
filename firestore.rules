@@ -216,6 +216,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // === تذاكر الدعم ورسائل تواصل معنا ===
+    match /support_tickets/{ticketId} {
+      allow create: if request.resource.data.keys().size() <= 8 &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() >= 5 &&
+        request.resource.data.message.size() <= 900;
+      allow read, update, delete: if isAdmin();
+    }
+
     // === إغلاق افتراضي لأي مسار غير مصرّح به (Default Deny-All) ===
     match /{document=**} {
       allow read, write: if false;

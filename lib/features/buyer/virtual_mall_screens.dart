@@ -1,3 +1,5 @@
+import '../shared/about_and_contact_screen.dart';
+import '../shared/legal_and_privacy_screen.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/analytics_and_accounting_service.dart';
@@ -363,6 +365,66 @@ class _RegionsHomeScreenState extends State<RegionsHomeScreen> {
                             }).toList(),
                           );
                         },
+                      ),
+                      const SizedBox(height: 40),
+                      // Enterprise Footer
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(color: LuxuryColors.navy, borderRadius: BorderRadius.circular(20), border: Border.all(color: LuxuryColors.gold.withValues(alpha: 0.35))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              runSpacing: 14,
+                              spacing: 20,
+                              children: [
+                                const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('معرضي', style: TextStyle(color: LuxuryColors.gold, fontSize: 20, fontWeight: FontWeight.w800)),
+                                    SizedBox(height: 4),
+                                    Text('شارع المعارض الرقمي في المملكة العربية السعودية', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
+                                  ],
+                                ),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 8,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: BorderSide(color: LuxuryColors.gold.withValues(alpha: 0.5))),
+                                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutAndContactScreen(initialSection: 0))),
+                                      icon: const Icon(Icons.info_outline, size: 16, color: LuxuryColors.gold),
+                                      label: const Text('من نحن', style: TextStyle(fontWeight: FontWeight.w700)),
+                                    ),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: BorderSide(color: LuxuryColors.gold.withValues(alpha: 0.5))),
+                                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutAndContactScreen(initialSection: 1))),
+                                      icon: const Icon(Icons.support_agent_outlined, size: 16, color: LuxuryColors.gold),
+                                      label: const Text('تواصل معنا', style: TextStyle(fontWeight: FontWeight.w700)),
+                                    ),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: BorderSide(color: LuxuryColors.gold.withValues(alpha: 0.5))),
+                                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LegalAndPrivacyScreen())),
+                                      icon: const Icon(Icons.policy_outlined, size: 16, color: LuxuryColors.gold),
+                                      label: const Text('الشروط والخصوصية (PDPL)', style: TextStyle(fontWeight: FontWeight.w700)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const Divider(color: Colors.white24, height: 28),
+                            const Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              spacing: 16,
+                              runSpacing: 6,
+                              children: [
+                                Text('© 2026 منصة معرضي · جميع الحقوق محفوظة', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                                Text('البيانات مستضافة داخل المملكة العربية السعودية (me-central2)', style: TextStyle(color: LuxuryColors.gold, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
