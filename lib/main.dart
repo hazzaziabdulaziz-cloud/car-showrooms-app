@@ -1,3 +1,4 @@
+import 'features/shared/about_and_contact_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -143,12 +144,25 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
         builder: (homeCtx) => Scaffold(
           appBar: AppBar(
             centerTitle: true,
-            leading: IconButton(
+            leadingWidth: 110,
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'من نحن وتواصل معنا',
+                  icon: const Icon(Icons.support_agent_outlined, color: LuxuryColors.gold),
+                  onPressed: () => Navigator.of(homeCtx).push(
+                    MaterialPageRoute(builder: (_) => const AboutAndContactScreen()),
+                  ),
+                ),
+                IconButton(
               tooltip: 'الشروط وسياسة الخصوصية (PDPL)',
               icon: const Icon(Icons.policy_outlined, color: LuxuryColors.gold),
               onPressed: () => Navigator.of(homeCtx).push(
                 MaterialPageRoute(builder: (_) => const LegalAndPrivacyScreen()),
               ),
+            ),
+              ],
             ),
             title: const Text('معرضي', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
             actions: [_buildNavSwitcher()],

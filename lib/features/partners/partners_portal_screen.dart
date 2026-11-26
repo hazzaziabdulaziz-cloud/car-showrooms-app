@@ -1846,7 +1846,6 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                               style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.navy)),
                               onPressed: () async {
                                 final price = (d['car_price'] is num) ? (d['car_price'] as num).round() : 0;
-                                final dep = (d['total_paid'] is num) ? (d['total_paid'] as num).round() : ((d['reservation_fee'] is num) ? (d['reservation_fee'] as num).round() : 0);
                                 String srBank = 'الحساب التجاري المعتمد للمعرض';
                                 String srIban = 'يُراجع من ملف المعرض';
                                 final srId = (d['showroom_id'] ?? '').toString();

@@ -514,6 +514,31 @@ class _RegionShowroomsStreetScreenState extends State<RegionShowroomsStreetScree
                     padding: const EdgeInsets.all(20),
                     children: [
                       Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: LuxuryColors.navy,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: LuxuryColors.gold.withValues(alpha: 0.45)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('شارع معارض ${region.nameAr}', style: const TextStyle(color: LuxuryColors.gold, fontSize: 20, fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 4),
+                                  Text('معارض وسيارات منطقة ${region.nameAr} الموثقة · ${showrooms.length} معرض · ${cars.length} سيارة متاحة', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.location_city, color: LuxuryColors.gold, size: 32),
+                          ],
+                        ),
+                      ),
+                      Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(color: LuxuryColors.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: LuxuryColors.border)),
                         child: Column(
