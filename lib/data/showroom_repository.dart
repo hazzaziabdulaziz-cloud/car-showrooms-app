@@ -194,10 +194,16 @@ class ShowroomRepository {
   }
 
   Stream<List<ShowroomModel>> watchShowrooms() {
-    return _firestore
-        .collection('showrooms')
-        .snapshots()
-        .map((snap) => snap.docs.map(ShowroomModel.fromDoc).toList());
+    return _firestore.collection('showrooms').snapshots().map((snap) {
+      final now = DateTime.now();
+      final active = snap.docs.where((doc) {
+        final ts = doc.data()['subscription_expires_at'];
+        if (ts is Timestamp) return ts.toDate().isAfter(now);
+        return true;
+      }).map(ShowroomModel.fromDoc).toList();
+      active.sort((a, b) => (b.isPrimeSpot ? 1 : 0).compareTo(a.isPrimeSpot ? 1 : 0));
+      return active;
+    });
   }
 
   Stream<List<CarListingModel>> watchCars({int limit = 100}) {
@@ -206,7 +212,10 @@ class ShowroomRepository {
         .orderBy('created_at', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) => snap.docs.map(CarListingModel.fromDoc).toList());
+        .map((snap) => snap.docs
+            .where((doc) => (doc.data()['status'] ?? 'available') == 'available')
+            .map(CarListingModel.fromDoc)
+            .toList());
   }
 
   Future<void> seedVirtualMallDemo() async {

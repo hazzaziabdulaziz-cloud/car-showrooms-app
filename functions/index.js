@@ -103,6 +103,34 @@ exports.scheduledOrderMaintenance = onSchedule({ schedule: "every 15 minutes", r
       await doc.ref.update({ inspector_payout_status: "released_auto_48h", released_at: now });
     }
   }
+
+  // ج) مراقبة مهلة الفاحص (24 ساعة): خصم 50 ر.س وإعادة فتح المهمة تلقائياً لفاحص آخر
+  const cutoff24h = admin.firestore.Timestamp.fromMillis(now.toMillis() - 24 * 60 * 60 * 1000);
+  const lateInspections = await db.collection("orders")
+    .where("inspection_status", "==", "inspector_accepted")
+    .where("inspector_uid_claimed_at", "<=", cutoff24h)
+    .limit(50)
+    .get();
+
+  for (const doc of lateInspections.docs) {
+    const lateUid = doc.data().inspector_uid || "";
+    await doc.ref.update({
+      inspection_status: "pending_inspector",
+      inspector_uid: admin.firestore.FieldValue.delete(),
+      inspector_sla_penalty_50: true,
+      reopened_at: now,
+    });
+    if (lateUid) {
+      await db.collection("ledger_entries").add({
+        type: "inspector_sla_penalty",
+        inspector_uid: lateUid,
+        order_id: doc.id,
+        amount: -50,
+        note: "غرامة تأخر الفاحص عن مهلة 24 ساعة وإعادة فتح المهمة",
+        created_at: now,
+      });
+    }
+  }
 });
 
 // 3. إشعارات فورية (FCM) عند تحديث حالة الطلب
@@ -155,7 +183,7 @@ exports.paymentSplitWebhook = onRequest({ region: REGION }, async (req, res) => 
 
   const vat = (Number(commissionTotal || 50) * 15) / 115;
   const qr = generateZatcaQrBase64(
-    "منصة معرضي للوساطة التقنية",
+    "منصة شاري للوساطة التقنية",
     process.env.ZATCA_VAT_NUMBER || "300000000000003",
     new Date().toISOString(),
     commissionTotal || 50,
@@ -168,4 +196,40 @@ exports.paymentSplitWebhook = onRequest({ region: REGION }, async (req, res) => 
     paid_at: admin.firestore.FieldValue.serverTimestamp(),
   });
   return res.status(200).json({ ok: true, zatca_qr: qr });
+});
+
+
+// قاعدة الربط الرسمية مع بوابة واثق (Wathq API v5) للتحقق من السجل التجاري / الرقم الموحد
+exports.verifyCommercialRegistrationWithWathq = onCall({ region: "me-central2" }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  }
+  const crNumber = String(request.data?.crNumber || "").replace(/\s+/g, "");
+  if (!/^(700\d{7}|\d{10})$/.test(crNumber)) {
+    throw new HttpsError("invalid-argument", "صيغة الرقم الموحد أو السجل التجاري غير صحيحة.");
+  }
+  const apiKey = process.env.WATHQ_API_KEY;
+  if (!apiKey) {
+    return {
+      mode: "manual_review_fallback",
+      verified: false,
+      crNumber,
+      message: "قاعدة الربط جاهزة؛ بانتظار إضافة WATHQ_API_KEY للتوثيق الآلي (يعمل التوثيق اليدوي حالياً).",
+    };
+  }
+  const resp = await fetch(`https://api.wathq.sa/v5/commercialregistration/info/${crNumber}`, {
+    headers: { apiKey, accept: "application/json" },
+  });
+  if (!resp.ok) {
+    throw new HttpsError("failed-precondition", "تعذر التحقق من السجل عبر واثق، تأكد من الرقم.");
+  }
+  const info = await resp.json();
+  return {
+    mode: "wathq_live",
+    verified: info?.status?.id === "active" || info?.status?.name === "نشط",
+    crNumber,
+    commercialName: info?.crName || "",
+    expiryDate: info?.expiryDate || "",
+    statusName: info?.status?.name || "",
+  };
 });

@@ -1,7 +1,7 @@
+import '../../core/atomic_order_guard.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/analytics_and_accounting_service.dart';
-import '../../core/showcase_seeder.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -36,9 +36,11 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   bool _authLoading = false;
   String _signupPartnerType = 'showroom';
   String? _selectedGateway;
-  String? _previewRole;
 
   int _roleTab = 0;
+  String _ordersFilter = 'all';
+  String _inspFilter = 'all';
+  String _towFilter = 'all';
   String? _adminSelectedShowroomId;
 
   final _showroomKey = GlobalKey<FormState>();
@@ -254,6 +256,35 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
 
   Future<void> _submitCar(ShowroomModel myShowroom) async {
     if (!_carKey.currentState!.validate()) return;
+    if (_carImageUrls.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('الصور إجبارية: يرجى إضافة صورة واحدة للسيارة على الأقل قبل النشر.'),
+          backgroundColor: Color(0xFFB42318),
+        ),
+      );
+      return;
+    }
+    if (!isAdminEmail(FirebaseAuth.instance.currentUser?.email)) {
+      try {
+      final srDoc = await FirebaseFirestore.instance.collection('showrooms').doc(myShowroom.id).get();
+      final plan = (srDoc.data()?['subscription_plan'] ?? 'free').toString();
+      final maxCars = plan == 'pro' ? 999999 : (plan == 'basic' ? 10 : 5);
+      final carsSnap = await FirebaseFirestore.instance
+          .collection('cars')
+          .where('showroom_id', isEqualTo: myShowroom.id)
+          .get();
+      final activeCount = carsSnap.docs.where((d) => (d.data()['status'] ?? 'available') != 'sold').length;
+      if (activeCount >= maxCars) {
+        if (!mounted) return;
+        final msg = plan == 'basic'
+            ? 'وصلت للحد الأقصى للباقة الأساسية (10 سيارات). قم بالترقية للاحترافية (999 ر.س — غير محدود + تثبيت).'
+            : 'وصلت للحد الأقصى للباقة المجانية (5 سيارات). قم بالترقية للأساسية (499 ر.س لـ 10 سيارات) أو الاحترافية (999 ر.س غير محدود).';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: const Color(0xFFB42318)));
+        return;
+      }
+    } catch (_) {}
+    }
     setState(() => _savingCar = true);
     try {
       final year = int.parse(_yearCtrl.text.trim());
@@ -347,9 +378,6 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnap) {
         final user = authSnap.data;
-        if (_previewRole != null) {
-          return _buildPreviewRolePortal(_previewRole!, user);
-        }
         if (user == null) return _buildAuthView();
         return _buildAuthenticatedPortal(user);
       },
@@ -523,118 +551,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 ],
               ),
             ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                  onPressed: () => setState(() {
-                    _roleTab = 0;
-                    _previewRole = id;
-                  }),
-                  child: const Text('معاينة فورية', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                ),
-                const SizedBox(height: 4),
-                const Text('أو اضغط للتسجيل', style: TextStyle(fontSize: 10.5, color: LuxuryColors.textSecondary)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPreviewRolePortal(String pType, User? user) {
-    final title = pType == 'showroom'
-        ? 'معاينة: لوحة المعرض / الوكالة'
-        : (pType == 'inspector' ? 'معاينة: لوحة تحكم الفاحص' : 'معاينة: لوحة تحكم صاحب السطحة');
-    final isAdmin = isAdminEmail(user?.email);
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 780),
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(color: LuxuryColors.navy, borderRadius: BorderRadius.circular(14)),
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
-                      Text(
-                        user == null ? 'وضع معاينة بدون تسجيل (سجّل دخولك كمدير لظهور كل الحجوزات الحية)' : 'وضع معاينة مباشر مع الحجوزات الحية ✓',
-                        style: const TextStyle(fontSize: 11.5, color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.gold, side: const BorderSide(color: LuxuryColors.gold)),
-                        onPressed: () => setState(() { _roleTab = 0; _previewRole = 'showroom'; }),
-                        child: const Text('معرض', style: TextStyle(fontSize: 12)),
-                      ),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.gold, side: const BorderSide(color: LuxuryColors.gold)),
-                        onPressed: () => setState(() => _previewRole = 'inspector'),
-                        child: const Text('فاحص', style: TextStyle(fontSize: 12)),
-                      ),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.gold, side: const BorderSide(color: LuxuryColors.gold)),
-                        onPressed: () => setState(() => _previewRole = 'tow_driver'),
-                        child: const Text('سطحة', style: TextStyle(fontSize: 12)),
-                      ),
-                      FilledButton(
-                        style: FilledButton.styleFrom(backgroundColor: LuxuryColors.gold, foregroundColor: LuxuryColors.navy),
-                        onPressed: () => setState(() => _previewRole = null),
-                        child: const Text('رجوع', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (pType == 'showroom') ...[
-              Wrap(
-                spacing: 8,
-                children: [
-                  _roleButton(0, 'إدارة معرضي والمخزون'),
-                  _roleButton(3, 'صندوق حجوزات معرضي'),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (_roleTab == 3)
-                _buildOrdersInbox(isAdmin || user != null)
-              else
-                StreamBuilder<List<ShowroomModel>>(
-                  stream: widget.repository.watchShowrooms(),
-                  builder: (context, snap) {
-                    final list = snap.data ?? const <ShowroomModel>[];
-                    if (list.isEmpty) return _buildRegisterShowroomCard();
-                    return _buildMyShowroomDashboard(list.first);
-                  },
-                ),
-            ] else if (pType == 'inspector') ...[
-              _buildInspectorTasksList(),
-              const SizedBox(height: 16),
-              _buildInspectorSubmittedReportsList(true),
-            ] else ...[
-              _buildTowLocationSwitchCard(),
-              const SizedBox(height: 14),
-              _buildTowTasksList(),
-              const SizedBox(height: 18),
-              _buildRegisterTowCard(),
-            ],
+            const Icon(Icons.arrow_forward_ios, size: 16, color: LuxuryColors.gold),
           ],
         ),
       ),
@@ -727,43 +644,6 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                   Row(
                     children: [
                       Text('الحساب النشط: ${user.email}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
-                      if (isAdmin) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: LuxuryColors.navy, borderRadius: BorderRadius.circular(6)),
-                          child: const Text('مدير النظام', style: TextStyle(fontSize: 11, color: LuxuryColors.gold, fontWeight: FontWeight.w700)),
-                        ),
-                      ],
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      if (isAdmin) ...[
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.navy)),
-                          onPressed: () => setState(() { _roleTab = 0; _previewRole = 'showroom'; }),
-                          child: const Text('معاينة معرض', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
-                        ),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.navy)),
-                          onPressed: () => setState(() => _previewRole = 'inspector'),
-                          child: const Text('معاينة فاحص', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
-                        ),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.navy)),
-                          onPressed: () => setState(() => _previewRole = 'tow_driver'),
-                          child: const Text('معاينة سطحة', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
-                        ),
-                      ],
-                      if (isAdmin)
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
-                          onPressed: () => ShowcaseSeeder.seedAll(context),
-                          icon: const Icon(Icons.auto_awesome, size: 15, color: LuxuryColors.gold),
-                          label: const Text('تعبئة بيانات العرض', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                        ),
                       TextButton.icon(
                         onPressed: () => FirebaseAuth.instance.signOut(),
                     icon: const Icon(Icons.logout, size: 16, color: LuxuryColors.danger),
@@ -890,7 +770,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 spacing: 8,
                 children: [
                   _roleButton(0, 'إدارة معرضي والمخزون'),
-                  _roleButton(3, 'صندوق حجوزات معرضي'),
+                  _roleButton(3, 'صندوق حجوزات شاري'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -1302,7 +1182,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                       style: OutlinedButton.styleFrom(foregroundColor: LuxuryColors.navy, side: const BorderSide(color: LuxuryColors.gold)),
                       onPressed: _uploadingCarPhoto ? null : () => _pickCarPhoto(myShowroom.id),
                       icon: const Icon(Icons.add_a_photo_outlined, size: 18),
-                      label: Text(_uploadingCarPhoto ? 'جاري الرفع...' : 'إضافة صور السيارة (${_carImageUrls.length}/5)', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      label: Text(_uploadingCarPhoto ? 'جاري الرفع...' : 'إضافة صور السيارة · إجباري (${_carImageUrls.length}/5)', style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
@@ -1393,7 +1273,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         ),
                         TextButton(
                           onPressed: () => widget.repository.updateCarStatus(car.id, isSold ? 'available' : 'sold'),
-                          child: Text(isSold ? 'إتاحة' : 'تم البيع', style: TextStyle(color: isSold ? LuxuryColors.success : LuxuryColors.navy, fontWeight: FontWeight.w800)),
+                          child: Text(isSold ? 'إعادة للإتاحة' : 'تحديد كمباعة', style: TextStyle(color: isSold ? LuxuryColors.success : LuxuryColors.navy, fontWeight: FontWeight.w800)),
                         ),
                         IconButton(
                           tooltip: 'حذف السيارة',
@@ -1782,10 +1662,55 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
             ),
           );
         }
+        bool isWaiting(String s) => s == 'paid_waiting_showroom' || s == 'pending_showroom';
+        bool isApproved(String s) => s == 'confirmed' || s == 'path_selected' || s == 'completed';
+        bool isRejected(String s) => s.contains('cancel') || s.contains('refund') || s.contains('expired') || s.contains('forfeit');
+
+        final waitCnt = docs.where((x) => isWaiting(((x.data() as Map?)?['status'] ?? '').toString())).length;
+        final appCnt = docs.where((x) => isApproved(((x.data() as Map?)?['status'] ?? '').toString())).length;
+        final rejCnt = docs.where((x) => isRejected(((x.data() as Map?)?['status'] ?? '').toString())).length;
+
+        final filteredDocs = docs.where((x) {
+          final st = ((x.data() as Map?)?['status'] ?? 'paid_waiting_showroom').toString();
+          if (_ordersFilter == 'waiting') return isWaiting(st);
+          if (_ordersFilter == 'approved') return isApproved(st);
+          if (_ordersFilter == 'rejected') return isRejected(st);
+          return true;
+        }).toList();
+
+        Widget filterBtn(String id, String label) {
+          final active = _ordersFilter == id;
+          return ChoiceChip(
+            label: Text(label),
+            selected: active,
+            selectedColor: LuxuryColors.navy,
+            backgroundColor: LuxuryColors.surface,
+            labelStyle: TextStyle(color: active ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700, fontSize: 12),
+            onSelected: (_) => setState(() => _ordersFilter = id),
+          );
+        }
+
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildSubscriptionAndPolicyBanner(),
-            ...docs.map((doc) {
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  filterBtn('all', 'الكل (${docs.length})'),
+                  filterBtn('waiting', 'بانتظار الرد ($waitCnt)'),
+                  filterBtn('approved', 'موافق عليها ($appCnt)'),
+                  filterBtn('rejected', 'مرفوضة / ملغاة ($rejCnt)'),
+                ],
+              ),
+            ),
+            if (filteredDocs.isEmpty)
+              _luxuryCard(child: const Center(child: Text('لا توجد طلبات في هذا التصنيف حالياً.', style: TextStyle(color: LuxuryColors.textSecondary))))
+            else
+            ...filteredDocs.map((doc) {
               final d = (doc.data() as Map?) ?? {};
               final status = (d['status'] ?? 'paid_waiting_showroom').toString();
               final isConfirmed = status == 'confirmed';
@@ -2119,11 +2044,37 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   Widget _buildInspectorTasksList() {
     final activeRegionName = findRegion(_inspRegionId).nameAr;
     return StreamBuilder(
-      stream: FirebaseFirestore.instance.collection('orders').where('inspection_status', whereIn: ['pending_inspector', 'inspector_accepted']).snapshots(),
+      stream: FirebaseFirestore.instance.collection('orders').where('inspection_status', whereIn: ['pending_inspector', 'inspector_accepted', 'report_ready']).snapshots(),
       builder: (context, snap) {
-        final docs = (snap.data?.docs ?? const [])
+        final regionDocs = (snap.data?.docs ?? const [])
             .where((doc) => (doc.data()['region_id'] ?? 'riyadh').toString() == _inspRegionId)
             .toList();
+
+        bool isNew(Map m) => m['inspection_status'] == 'pending_inspector';
+        bool isAcc(Map m) => m['inspection_status'] == 'inspector_accepted';
+        bool isApp(Map m) => m['inspection_status'] == 'report_ready' && m['buyer_inspection_decision'] != 'cancelled';
+        bool isRej(Map m) => m['buyer_inspection_decision'] == 'cancelled' || (m['status'] ?? '').toString().contains('cancel');
+
+        final docs = regionDocs.where((doc) {
+          final m = doc.data();
+          if (_inspFilter == 'pending') return isNew(m);
+          if (_inspFilter == 'accepted') return isAcc(m);
+          if (_inspFilter == 'approved') return isApp(m);
+          if (_inspFilter == 'rejected') return isRej(m);
+          return true;
+        }).toList();
+
+        Widget inspChip(String id, String label) {
+          final active = _inspFilter == id;
+          return ChoiceChip(
+            label: Text(label),
+            selected: active,
+            selectedColor: LuxuryColors.navy,
+            backgroundColor: LuxuryColors.background,
+            labelStyle: TextStyle(color: active ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700, fontSize: 11.5),
+            onSelected: (_) => setState(() => _inspFilter = id),
+          );
+        }
         return _luxuryCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2148,6 +2099,18 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 decoration: luxuryInput('منطقتك الحالية لاستقبال طلبات الفحص'),
                 items: kSaudiRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.nameAr))).toList(),
                 onChanged: (v) { if (v != null) setState(() => _inspRegionId = v); },
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  inspChip('all', 'الكل (${regionDocs.length})'),
+                  inspChip('pending', 'جديدة (${regionDocs.where((d) => isNew(d.data())).length})'),
+                  inspChip('accepted', 'مقبولة 24س (${regionDocs.where((d) => isAcc(d.data())).length})'),
+                  inspChip('approved', 'مقبولة من العميل (${regionDocs.where((d) => isApp(d.data())).length})'),
+                  inspChip('rejected', 'مرفوضة / ملغاة (${regionDocs.where((d) => isRej(d.data())).length})'),
+                ],
               ),
               const Divider(height: 20),
               if (docs.isEmpty)
@@ -2340,6 +2303,23 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                             onPressed: _busyDocIds.contains(doc.id) ? null : () => _runSafeDocAction(doc.id, () => doc.reference.update({'is_verified': true, 'status': 'verified'})),
                             child: const Text('اعتماد وتوثيق', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
                           ),
+                      const SizedBox(width: 6),
+                      PopupMenuButton<String>(
+                        tooltip: 'تغيير باقة المعرض',
+                        icon: const Icon(Icons.workspace_premium, color: Color(0xFFC5A059), size: 20),
+                        onSelected: (plan) async {
+                          await AtomicOrderGuard.adminActivatePlan(doc.id, plan);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم تفعيل باقة ($plan) للمعرض لمدة 30 يوماً.')));
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'free', child: Text('تعيين المجانية (5 سيارات)')),
+                          PopupMenuItem(value: 'basic', child: Text('تفعيل الأساسية (499 ر.س · 10 سيارات)')),
+                          PopupMenuItem(value: 'pro', child: Text('تفعيل الاحترافية (999 ر.س · غير محدود)')),
+                        ],
+                      ),
+                      
                       ],
                     ),
                   );
@@ -2373,7 +2353,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                   activeColor: LuxuryColors.navy,
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
-                    'أتعهد أمام الله ثم أمام منصة «معرضي» بتصوير السيارة 4 صور واضحة قبل التحميل، وأقرّ بأنني بمجرد قبول هذا الطلب أتحمل كامل المسؤولية النظامية والمالية عن أي مشكلة أو تأخير أو ضرر أو عطل يحدث للسيارة أثناء التحميل والنقل وحتى تسليمها للمشتري، مع إخلاء مسؤولية «معرضي» كوسيط تقني.',
+                    'أتعهد أمام الله ثم أمام منصة «شاري» بتصوير السيارة 4 صور واضحة قبل التحميل، وأقرّ بأنني بمجرد قبول هذا الطلب أتحمل كامل المسؤولية النظامية والمالية عن أي مشكلة أو تأخير أو ضرر أو عطل يحدث للسيارة أثناء التحميل والنقل وحتى تسليمها للمشتري، مع إخلاء مسؤولية «شاري» كوسيط تقني.',
                     style: TextStyle(fontSize: 12, height: 1.45, fontWeight: FontWeight.w600),
                   ),
                   onChanged: (v) => setDlgState(() => agreed = v ?? false),
@@ -2475,16 +2455,54 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   Widget _buildTowTasksList() {
     final activeRegionName = findRegion(_towCurrentRegion).nameAr;
     return StreamBuilder(
-      stream: FirebaseFirestore.instance.collection('orders').where('shipping_status', whereIn: ['pending_tow', 'in_transit']).snapshots(),
+      stream: FirebaseFirestore.instance.collection('orders').where('shipping_status', whereIn: ['pending_tow', 'in_transit', 'delivered']).snapshots(),
       builder: (context, snap) {
-        final docs = (snap.data?.docs ?? const [])
+        final regionDocs = (snap.data?.docs ?? const [])
             .where((doc) => (doc.data()['region_id'] ?? 'riyadh').toString() == _towCurrentRegion)
             .toList();
+
+        bool isNew(Map m) => m['shipping_status'] == 'pending_tow' && !(m['status'] ?? '').toString().contains('cancel');
+        bool isActive(Map m) => m['shipping_status'] == 'in_transit' && !(m['status'] ?? '').toString().contains('cancel');
+        bool isDone(Map m) => m['shipping_status'] == 'delivered';
+        bool isRej(Map m) => (m['status'] ?? '').toString().contains('cancel') || (m['status'] ?? '').toString().contains('refund');
+
+        final docs = regionDocs.where((doc) {
+          final m = doc.data();
+          if (_towFilter == 'pending') return isNew(m);
+          if (_towFilter == 'in_transit') return isActive(m);
+          if (_towFilter == 'delivered') return isDone(m);
+          if (_towFilter == 'rejected') return isRej(m);
+          return true;
+        }).toList();
+
+        Widget towChip(String id, String label) {
+          final active = _towFilter == id;
+          return ChoiceChip(
+            label: Text(label),
+            selected: active,
+            selectedColor: LuxuryColors.navy,
+            backgroundColor: LuxuryColors.background,
+            labelStyle: TextStyle(color: active ? LuxuryColors.gold : LuxuryColors.navy, fontWeight: FontWeight.w700, fontSize: 11.5),
+            onSelected: (_) => setState(() => _towFilter = id),
+          );
+        }
         return _luxuryCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('رحلات الشحن المتاحة في منطقتك ($activeRegionName)', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  towChip('all', 'الكل (${regionDocs.length})'),
+                  towChip('pending', 'جديدة (${regionDocs.where((d) => isNew(d.data())).length})'),
+                  towChip('in_transit', 'مقبولة / جارية (${regionDocs.where((d) => isActive(d.data())).length})'),
+                  towChip('delivered', 'مكتملة (${regionDocs.where((d) => isDone(d.data())).length})'),
+                  towChip('rejected', 'مرفوضة / ملغاة (${regionDocs.where((d) => isRej(d.data())).length})'),
+                ],
+              ),
               const Divider(height: 18),
               if (docs.isEmpty)
                 Text('لا توجد رحلات شحن جديدة في منطقة $activeRegionName حالياً.', style: const TextStyle(color: LuxuryColors.textSecondary))

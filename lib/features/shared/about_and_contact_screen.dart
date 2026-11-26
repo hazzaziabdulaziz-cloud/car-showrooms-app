@@ -46,7 +46,7 @@ class _AboutAndContactScreenState extends State<AboutAndContactScreen> {
       _phoneCtrl.clear();
       _msgCtrl.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: LuxuryColors.success, content: Text('تم استلام رسالتك بنجاح ✓ سيتواصل معك فريق دعم «معرضي» قريباً.')),
+        const SnackBar(backgroundColor: LuxuryColors.success, content: Text('تم استلام رسالتك بنجاح ✓ سيتواصل معك فريق دعم «شاري» قريباً.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -82,12 +82,12 @@ class _AboutAndContactScreenState extends State<AboutAndContactScreen> {
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('من نحن — منصة «معرضي»', style: TextStyle(color: LuxuryColors.gold, fontSize: 13.5, fontWeight: FontWeight.w800)),
+                    Text('من نحن — منصة «شاري»', style: TextStyle(color: LuxuryColors.gold, fontSize: 13.5, fontWeight: FontWeight.w800)),
                     SizedBox(height: 8),
                     Text('شارع المعارض الرقمي الأول في المملكة العربية السعودية', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, height: 1.35)),
                     SizedBox(height: 10),
                     Text(
-                      'وُلدت «معرضي» لتنقل تجربة زيارة معارض ووكالات السيارات في مناطق المملكة الـ 13 إلى جوالك بشفافية وأمان كامل: توثيق رسمي للمعارض بشهادات الآيبان، فحص فني مستقل بـ 12 بنداً، شحن موثق بـ 4 صور عبر سطحات معتمدة، ونظام ضمان يحفظ حقوق الجميع.',
+                      'وُلدت «شاري» لتنقل تجربة زيارة معارض ووكالات السيارات في مناطق المملكة الـ 13 إلى جوالك بشفافية وأمان كامل: توثيق رسمي للمعارض بشهادات الآيبان، فحص فني مستقل بـ 12 بنداً، شحن موثق بـ 4 صور عبر سطحات معتمدة، ونظام ضمان يحفظ حقوق الجميع.',
                       style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.65),
                     ),
                   ],
@@ -149,7 +149,7 @@ class _AboutAndContactScreenState extends State<AboutAndContactScreen> {
                           style: FilledButton.styleFrom(backgroundColor: LuxuryColors.navy, foregroundColor: LuxuryColors.gold, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                           onPressed: _sending ? null : _submitTicket,
                           icon: const Icon(Icons.send_outlined, size: 18),
-                          label: Text(_sending ? 'جاري الإرسال...' : 'إرسال الرسالة لفريق «معرضي»', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
+                          label: Text(_sending ? 'جاري الإرسال...' : 'إرسال الرسالة لفريق «شاري»', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
                         ),
                       ),
                     ],

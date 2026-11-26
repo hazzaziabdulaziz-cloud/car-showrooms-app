@@ -1,3 +1,4 @@
+import '../../core/atomic_order_guard.dart';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -347,6 +348,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
         } catch (_) {}
       }
 
+      await AtomicOrderGuard.reserveCarAtomically(widget.carId);
       final orderDoc = await FirebaseFirestore.instance.collection('orders').add({
         'order_code': orderCode,
         'handover_pin': handoverPin,
@@ -514,7 +516,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                                     : '4/4: دفع عربون الحجز فقط',
                         style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
                       ),
-                      Text(widget.interestedCarTitle ?? 'حجز سيارة عبر معرضي', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
+                      Text(widget.interestedCarTitle ?? 'حجز سيارة عبر شاري', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -684,7 +686,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                     const SizedBox(height: 6),
                     const Align(
                       alignment: Alignment.centerRight,
-                      child: Text('رسوم حجز وضمان لصالح منصة «معرضي» عند إتمام البيعة · مستردة 100% في حال عدم توفر السيارة أو وجود عيب في الفحص', style: TextStyle(color: Colors.white70, fontSize: 11.5)),
+                      child: Text('رسوم حجز وضمان لصالح منصة «شاري» عند إتمام البيعة · مستردة 100% في حال عدم توفر السيارة أو وجود عيب في الفحص', style: TextStyle(color: Colors.white70, fontSize: 11.5)),
                     ),
                   ],
                 ),
@@ -741,7 +743,7 @@ class _BuyerVerificationSheetState extends State<BuyerVerificationSheet> {
                     checkColor: LuxuryColors.gold,
                     title: const Text('إقرار الأمانة وحفظ الحقوق (إلزامي)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                     subtitle: const Text(
-                      'أقرّ بأن مجرد رؤيتي للسيارة ومعرفة المعرض عبر «معرضي» لا يُعفيني من العربون، وألتزم بإتمام الحجز داخل التطبيق. كما أقرّ بأن «معرضي» وسيط تقني موثّق فقط (المسؤولية الفنية على الفاحص والتجارية على المعرض والنقل على السطحة)، وأن لي نافذة اعتراض 24 ساعة (أو 50 كم) بعد الاستلام. وفي حال تراجعي بدون عيب بعد تأكيد المعرض وتجميد السيارة لا يُسترد العربون تعويضاً عن تعطيل البيع.',
+                      'أقرّ بأن مجرد رؤيتي للسيارة ومعرفة المعرض عبر «شاري» لا يُعفيني من العربون، وألتزم بإتمام الحجز داخل التطبيق. كما أقرّ بأن «شاري» وسيط تقني موثّق فقط (المسؤولية الفنية على الفاحص والتجارية على المعرض والنقل على السطحة)، وأن لي نافذة اعتراض 24 ساعة (أو 50 كم) بعد الاستلام. وفي حال تراجعي بدون عيب بعد تأكيد المعرض وتجميد السيارة لا يُسترد العربون تعويضاً عن تعطيل البيع.',
                       style: TextStyle(fontSize: 11.5, color: LuxuryColors.textPrimary, height: 1.4),
                     ),
                     onChanged: (v) => setState(() => _antiBypassAgreed = v ?? false),

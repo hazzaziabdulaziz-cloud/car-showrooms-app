@@ -179,7 +179,7 @@ class _RegionsHomeScreenState extends State<RegionsHomeScreen> {
                                   ),
                                   const SizedBox(height: 6),
                                   const Text(
-                                    'تجوّل بين تجمعات المعارض الموثقة في كل منطقة، عاين السيارات، واحجز سيارتك بعربون محمي عبر «ضمان معرضي» مع خيار الفحص والشحن لباب بيتك.',
+                                    'تجوّل بين تجمعات المعارض الموثقة في كل منطقة، عاين السيارات، واحجز سيارتك بعربون محمي عبر «ضمان شاري» مع خيار الفحص والشحن لباب بيتك.',
                                     style: TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.55),
                                   ),
                                 ],
@@ -382,7 +382,7 @@ class _RegionsHomeScreenState extends State<RegionsHomeScreen> {
                                 const Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('معرضي', style: TextStyle(color: LuxuryColors.gold, fontSize: 20, fontWeight: FontWeight.w800)),
+                                    Text('شاري', style: TextStyle(color: LuxuryColors.gold, fontSize: 20, fontWeight: FontWeight.w800)),
                                     SizedBox(height: 4),
                                     Text('شارع المعارض الرقمي في المملكة العربية السعودية', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
                                   ],
@@ -419,7 +419,7 @@ class _RegionsHomeScreenState extends State<RegionsHomeScreen> {
                               spacing: 16,
                               runSpacing: 6,
                               children: [
-                                Text('© 2026 منصة معرضي · جميع الحقوق محفوظة', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                                Text('© 2026 منصة شاري · جميع الحقوق محفوظة', style: TextStyle(color: Colors.white60, fontSize: 12)),
                                 Text('البيانات مستضافة داخل المملكة العربية السعودية (me-central2)', style: TextStyle(color: LuxuryColors.gold, fontSize: 11.5, fontWeight: FontWeight.w600)),
                               ],
                             ),
@@ -806,7 +806,7 @@ class CarDetailsScreen extends StatelessWidget {
 
   Future<void> _shareOnWhatsApp(String title, int price, String showroomName, String carId) async {
     final link = 'https://car-showrooms-sa.web.app/c/$carId';
-    final msg = Uri.encodeComponent('شف هذه السيارة في تطبيق معرضي:\n$title\nالسعر: ${_formatPrice(price)} ر.س\nالمعرض: $showroomName\n$link');
+    final msg = Uri.encodeComponent('شف هذه السيارة في تطبيق شاري:\n$title\nالسعر: ${_formatPrice(price)} ر.س\nالمعرض: $showroomName\n$link');
     final uri = Uri.parse('https://wa.me/?text=$msg');
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -909,7 +909,7 @@ class CarDetailsScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text('حالة البودي: $body · العداد: $mileage كم', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    Text('• رقم المعرض المباشر محجوب لحماية حقوق الطرفين، ويُفتح فوراً بعد دفع عربون الجدية ($fee ر.س رسوم حجز وضمان لصالح منصة «معرضي» — مستردة 100% عند عدم التوفر أو وجود عيب).', style: const TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
+                    Text('• رقم المعرض المباشر محجوب لحماية حقوق الطرفين، ويُفتح فوراً بعد دفع عربون الجدية ($fee ر.س رسوم حجز وضمان لصالح منصة «شاري» — مستردة 100% عند عدم التوفر أو وجود عيب).', style: const TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
                     const SizedBox(height: 6),
                     const Text('• التجميد الذكي: يبدأ التجميد بعد تأكيد المعرض (4 ساعات داخل نفس المدينة، و24 ساعة لخارج المنطقة).', style: TextStyle(fontSize: 13, color: LuxuryColors.textSecondary)),
                     const SizedBox(height: 6),

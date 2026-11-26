@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Car Showrooms App</string>
+	<string>شاري</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>يحتاج تطبيق شاري إلى الكاميرا لتصوير السيارات وشهادة الآيبان وتوثيق استلام وتسليم السطحة.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>يحتاج تطبيق شاري إلى مكتبة الصور لرفع صور السيارات وشهادة الآيبان وتقارير الفحص.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>يحتاج تطبيق شاري إلى موقعك لتحديد منطقتك وعرض أقرب المعارض وطلبات الفحص والسطحة في نطاقك.</string>
 </dict>
 </plist>

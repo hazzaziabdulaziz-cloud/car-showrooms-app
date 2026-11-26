@@ -87,7 +87,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
     }
     final digits = InputSanitizer.cleanSaudiPhone(phone);
     final intl = digits.startsWith('05') ? '966${digits.substring(1)}' : digits;
-    final text = Uri.encodeComponent('السلام عليكم، بخصوص الحجز رقم $orderCode للسيارة $carTitle عبر تطبيق معرضي.');
+    final text = Uri.encodeComponent('السلام عليكم، بخصوص الحجز رقم $orderCode للسيارة $carTitle عبر تطبيق شاري.');
     final uri = Uri.parse(intl.isNotEmpty ? 'https://wa.me/$intl?text=$text' : 'https://wa.me/?text=$text');
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -173,6 +173,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
         'needs_shipping': needsShip,
         'inspection_status': needsInsp ? 'pending_inspector' : 'none',
         'shipping_status': needsShip ? 'pending_tow' : 'none',
+        'tow_status': needsShip ? 'pending_tow' : 'none',
         'inspector_share': needsInsp ? PricingRules.inspectorShare : 0,
         'platform_inspection_share': needsInsp ? PricingRules.platformInspectionShare : 0,
         'buyer_city': _selectedDeliveryCity ?? 'الرياض',
@@ -479,7 +480,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
             final data = latestDoc?.data();
             final status = (data?['status'] ?? '').toString();
             final inspStatus = (data?['inspection_status'] ?? 'none').toString();
-            final shipStatus = (data?['shipping_status'] ?? 'none').toString();
+            final shipStatus = ((data?['tow_status'] ?? data?['shipping_status']) ?? 'none').toString();
             final invoiceIssued = data?['invoice_issued'] == true;
 
             return Column(
@@ -581,7 +582,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'حالة السطحة: ${shipStatus == 'pending_tow' ? 'تم الحجز ✓ (بانتظار قبول سائق السطحة)' : (shipStatus == 'in_transit' ? 'السيارة على السطحة في الطريق إليك 🚚' : 'تم التسليم بنجاح ✓')}',
+                              'حالة السطحة: ${shipStatus == 'pending_tow' ? 'تم الحجز ✓ (بانتظار قبول سائق السطحة)' : (shipStatus == 'driver_assigned' ? 'تم تعيين كابتن السطحة (في طريقه للاستلام)' : shipStatus == 'in_transit' ? 'السيارة على السطحة في الطريق إليك 🚚' : 'تم التسليم بنجاح ✓')}',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                           ),
@@ -605,7 +606,7 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                             children: [
                               Icon(Icons.verified, color: LuxuryColors.gold, size: 18),
                               SizedBox(width: 6),
-                              Text('تقرير الفحص المعتمد من معرضي', style: TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 13.5)),
+                              Text('تقرير الفحص المعتمد من شاري', style: TextStyle(fontWeight: FontWeight.w800, color: LuxuryColors.navy, fontSize: 13.5)),
                             ],
                           ),
                           const Divider(height: 16),

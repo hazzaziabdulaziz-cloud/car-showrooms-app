@@ -97,7 +97,7 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
         'inspection_completed_at': FieldValue.serverTimestamp(),
         'inspector_pledge_accepted': true,
         'inspector_pledge_text':
-            'تعهد الفاحص بالتزام الأمانة وتحمل كامل المسؤولية النظامية والمالية مع إخلاء مسؤولية معرضي كوسيط تقني، والموافقة على حجز المستحقات 48 ساعة ونافذة الاعتراض 24 ساعة.',
+            'تعهد الفاحص بالتزام الأمانة وتحمل كامل المسؤولية النظامية والمالية مع إخلاء مسؤولية شاري كوسيط تقني، والموافقة على حجز المستحقات 48 ساعة ونافذة الاعتراض 24 ساعة.',
         'inspector_pledge_at': FieldValue.serverTimestamp(),
       });
 
@@ -146,7 +146,7 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('تقرير الفحص الرسمي · تطبيق معرضي', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
+                      const Text('تقرير الفحص الرسمي · تطبيق شاري', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                       Text('${widget.orderCode} · ${widget.carTitle}', style: const TextStyle(fontSize: 12, color: LuxuryColors.textSecondary)),
                     ],
                   ),
@@ -202,7 +202,7 @@ class _InspectionReportSheetState extends State<InspectionReportSheet> {
                 checkColor: LuxuryColors.gold,
                 title: const Text('تعهد الأمانة والمسؤولية القانونية (إلزامي)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: LuxuryColors.navy)),
                 subtitle: const Text(
-                  'أتعهد أمام الله ثم أمام منصة «معرضي» بالتزام الأمانة والدقة التامة في هذا التقرير، وأقرّ بأن «معرضي» وسيط تقني فقط وأتحمل كامل المسؤولية النظامية والمالية عن أي خطأ أو إخفاء عيب جوهري. كما أوافق على نافذة اعتراض المشتري (24 ساعة أو 50 كم بعد الاستلام) وحجز مستحقات الفحص لمدة 48 ساعة لحماية الحقوق.',
+                  'أتعهد أمام الله ثم أمام منصة «شاري» بالتزام الأمانة والدقة التامة في هذا التقرير، وأقرّ بأن «شاري» وسيط تقني فقط وأتحمل كامل المسؤولية النظامية والمالية عن أي خطأ أو إخفاء عيب جوهري. كما أوافق على نافذة اعتراض المشتري (24 ساعة أو 50 كم بعد الاستلام) وحجز مستحقات الفحص لمدة 48 ساعة لحماية الحقوق.',
                   style: TextStyle(fontSize: 11.5, color: LuxuryColors.textPrimary, height: 1.45),
                 ),
                 onChanged: (v) => setState(() => _pledgeAccepted = v ?? false),

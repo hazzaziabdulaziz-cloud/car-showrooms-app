@@ -106,7 +106,7 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
     return MaterialApp(
       navigatorKey: _navKey,
       debugShowCheckedModeBanner: false,
-      title: 'معرضي',
+      title: 'شاري',
       builder: (context, child) => Directionality(
         textDirection: TextDirection.rtl,
         child: child ?? const SizedBox.shrink(),
@@ -164,7 +164,33 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
             ),
               ],
             ),
-            title: const Text('معرضي', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: LuxuryColors.gold)),
+            title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset('assets/app_icon.png', width: 32, height: 32, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'شاري',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFFC5A059), letterSpacing: 0.2),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Color(0x26C5A059),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Color(0x55C5A059)),
+              ),
+              child: const Text(
+                'سيارات · فحص · شحن',
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFFFDE68A)),
+              ),
+            ),
+          ],
+        ),
             actions: [_buildNavSwitcher()],
           ),
           body: _currentTab == 0

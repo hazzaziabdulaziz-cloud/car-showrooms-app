@@ -1,3 +1,4 @@
+import '../../core/atomic_order_guard.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:material_ui/material_ui.dart';
@@ -49,7 +50,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   }
 
   Future<void> _cancelOrder(String docId, String currentStatus, String carId) async {
-    final waitingShowroom = currentStatus == 'paid_waiting_showroom' || currentStatus == 'pending_showroom';
+    final waitingShowroom = currentStatus == 'paid_waiting_showroom' || (currentStatus == 'pending_showroom' || currentStatus == 'paid_waiting_showroom');
     final refundPolicy = waitingShowroom
         ? 'سيتم إلغاء الحجز واسترداد العربون كاملاً 100% لأن المعرض لم يؤكد توفر السيارة بعد.'
         : 'تنبيه مهم: تم تأكيد توفر السيارة وتجميدها من المعرض بالفعل؛ في حال إلغائك الآن بدون عيب في الفحص لن يُسترد العربون (70% للمعرض تعويضاً عن تجميد السيارة و30% رسوم خدمة للمنصة وفق إقرار الأمانة). هل تؤكد الإلغاء؟';
@@ -119,6 +120,18 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     if (ok != true || reasonCtrl.text.trim().isEmpty) return;
 
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final allowed24h = await AtomicOrderGuard.isWithin24HourDisputeWindow(docId);
+    if (!allowed24h) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('انتهت مهلة الاعتراض النظامية (24 ساعة من التسليم/الفحص) ولا يمكن فتح نزاع جديد.'),
+            backgroundColor: Color(0xFFB42318),
+          ),
+        );
+      }
+      return;
+    }
     await FirebaseFirestore.instance.collection('disputes').add({
       'order_id': docId,
       'order_code': orderCode,

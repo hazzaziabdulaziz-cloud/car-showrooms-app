@@ -1,5 +1,5 @@
 {
-  "name": "maaridi-functions",
+  "name": "shari-functions",
   "engines": { "node": "20" },
   "main": "index.js",
   "dependencies": {
