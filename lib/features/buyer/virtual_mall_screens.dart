@@ -1,3 +1,4 @@
+import '../../core/buyer_experience_widgets.dart';
 import '../shared/about_and_contact_screen.dart';
 import '../shared/legal_and_privacy_screen.dart';
 import 'package:material_ui/material_ui.dart';
@@ -302,7 +303,14 @@ class _RegionsHomeScreenState extends State<RegionsHomeScreen> {
                           return Wrap(
                             spacing: spacing,
                             runSpacing: spacing,
-                            children: kSaudiRegions.map((region) {
+                            children: (List.of(kSaudiRegions)
+                              ..sort((a, b) {
+                                final bScore = allCars.where((c) => _readField(c, ['region_id', 'regionId']).toString() == b.id).length * 10 +
+                                    allShowrooms.where((s) => s.regionId == b.id).length;
+                                final aScore = allCars.where((c) => _readField(c, ['region_id', 'regionId']).toString() == a.id).length * 10 +
+                                    allShowrooms.where((s) => s.regionId == a.id).length;
+                                return bScore.compareTo(aScore);
+                              })).map((region) {
                               final srCount = allShowrooms.where((s) => s.regionId == region.id).length;
                               final carCount = allCars.where((c) => _readField(c, ['region_id', 'regionId']).toString() == region.id).length;
                               final isActive = srCount > 0 || carCount > 0;
@@ -837,7 +845,8 @@ class CarDetailsScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
         actions: [
-          IconButton(
+          FavoriteHeartButton(carId: _readField(car, ['id']).toString()),
+                                IconButton(
             tooltip: 'مشاركة رابط السيارة',
             icon: const Icon(Icons.share_outlined, color: LuxuryColors.gold),
             onPressed: () => _shareOnWhatsApp(title, price, srName, carId),

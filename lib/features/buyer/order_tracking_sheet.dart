@@ -1,3 +1,4 @@
+import '../../core/buyer_experience_widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -681,6 +682,12 @@ class _OrderTrackingSheetState extends State<OrderTrackingSheet> {
                     ),
                   ],
                   if (status == 'confirmed' || status == 'path_selected' || status == 'completed') ...[
+                    const SizedBox(height: 12),
+                    OrderRatingCard(
+                      orderId: latestDoc.id,
+                      showroomId: (data['showroom_id'] ?? '').toString(),
+                      showroomName: (data['showroom_name'] ?? 'المعرض').toString(),
+                    ),
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,
