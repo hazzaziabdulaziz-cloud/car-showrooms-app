@@ -71,8 +71,10 @@ class PartnerLaunchPlanBanner extends StatelessWidget {
         final paid = partnerType == 'inspector'
             ? d['inspectors_paid_enabled'] == true
             : d['towing_paid_enabled'] == true;
-        final text = !paid
-            ? 'فترة الإطلاق: التسجيل والاشتراك الشهري مجاني 100% حالياً (حصتك 80% صافية من كل طلب).'
+        final text = partnerType == 'showroom'
+            ? 'شارك كود إحالة معرضك مع المعارض المجاورة واربح 20 ر.س رصيداً عن كل معرض موثّق يرفع 5 سيارات.'
+            : !paid
+                ? 'فترة الإطلاق: التسجيل والاشتراك الشهري مجاني 100% حالياً (حصتك 80% صافية من كل طلب).'
             : (partnerType == 'inspector'
                 ? 'الاشتراك الشهري: فاحص فردي 149 ر.س · مركز فحص معتمد 299 ر.س (حصتك 200 ر.س لكل فحص).'
                 : 'الاشتراك الشهري: سطحة عادية 99 ر.س · هيدروليك VIP 199 ر.س · ناقلة متعددة 349 ر.س (حصتك 80%).');

@@ -1581,6 +1581,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+          const PartnerLaunchPlanBanner(partnerType: 'showroom'),
               const Row(
                 children: [
                   Icon(Icons.workspace_premium, color: LuxuryColors.gold, size: 20),
@@ -1790,7 +1791,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text('المشتري: ${d['buyer_name']} · الجوال: ${d['buyer_phone']} · المدينة: ${d['buyer_city']}', style: const TextStyle(fontSize: 13)),
+                      Text('المشتري: ${d['buyer_name']} · الجوال: ${status == 'paid_waiting_showroom' ? 'يظهر بعد الموافقة على الطلب' : d['buyer_phone']} · المدينة: ${d['buyer_city']}', style: const TextStyle(fontSize: 13)),
                       const SizedBox(height: 4),
                       Text('المعرض: ${d['showroom_name']} · الدفع: ${d['payment_method']} · العربون المدفوع في الضمان: ${d['total_paid']} ر.س', style: const TextStyle(fontSize: 12.5, color: LuxuryColors.textSecondary)),
                       if (isAdmin) ...[
