@@ -1,3 +1,4 @@
+import '../../core/launch_mode_gate.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -102,6 +103,7 @@ class AdminDisputeCenterTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const AdminLaunchControlsCard(),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(

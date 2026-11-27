@@ -206,7 +206,7 @@ class ShowroomRepository {
     });
   }
 
-  Stream<List<CarListingModel>> watchCars({int limit = 100}) {
+  Stream<List<CarListingModel>> watchCars({int limit = 20}) {
     return _firestore
         .collection('cars')
         .orderBy('created_at', descending: true)

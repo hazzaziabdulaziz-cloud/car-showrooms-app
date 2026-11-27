@@ -311,7 +311,7 @@ class _RegionsHomeScreenState extends State<RegionsHomeScreen> {
                                     allShowrooms.where((s) => s.regionId == a.id).length;
                                 return bScore.compareTo(aScore);
                               })).map((region) {
-                              final srCount = allShowrooms.where((s) => s.regionId == region.id).length;
+                              final srCount = allShowrooms.where((s) => s.isVerified && s.regionId == region.id).length;
                               final carCount = allCars.where((c) => _readField(c, ['region_id', 'regionId']).toString() == region.id).length;
                               final isActive = srCount > 0 || carCount > 0;
                               return SizedBox(
@@ -361,7 +361,7 @@ class _RegionsHomeScreenState extends State<RegionsHomeScreen> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text('$srCount معرض · $carCount سيارة', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
+                                            Text('$srCount ${srCount >= 3 && srCount <= 10 ? 'معارض' : 'معرض'} · $carCount ${carCount >= 3 && carCount <= 10 ? 'سيارات' : 'سيارة'}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: LuxuryColors.navy)),
                                             const Icon(Icons.arrow_forward_ios, size: 13, color: LuxuryColors.gold),
                                           ],
                                         ),

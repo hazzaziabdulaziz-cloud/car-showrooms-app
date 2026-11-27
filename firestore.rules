@@ -226,6 +226,16 @@ service cloud.firestore {
     }
 
     // === إغلاق افتراضي لأي مسار غير مصرّح به (Default Deny-All) ===
+    
+    match /app_settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /waitlist_leads/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -1,3 +1,4 @@
+import '../../core/partner_subscription_and_referral.dart';
 import '../../core/atomic_order_guard.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -51,6 +52,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
   final _srCustomHubCtrl = TextEditingController();
   final _srBankCtrl = TextEditingController(text: 'مصرف الراجحي');
   final _srIbanCtrl = TextEditingController();
+  final _srReferralCtrl = TextEditingController();
   String _srRegionId = 'riyadh';
   String _srHub = 'معارض القادسية';
   int _locationMode = 0;
@@ -113,6 +115,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
     _srCustomHubCtrl.dispose();
     _srBankCtrl.dispose();
     _srIbanCtrl.dispose();
+    _srReferralCtrl.dispose();
     _makeCtrl.dispose();
     _modelCtrl.dispose();
     _yearCtrl.dispose();
@@ -241,7 +244,19 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
       _srAddressCtrl.clear();
       _srPhoneCtrl.clear();
       _srCustomHubCtrl.clear();
+      final refCode = _srReferralCtrl.text.trim().toUpperCase();
+      if (refCode.isNotEmpty) {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          final latest = await FirebaseFirestore.instance.collection('showrooms').where('owner_uid', isEqualTo: uid).limit(1).get();
+          if (latest.docs.isNotEmpty) {
+            await latest.docs.first.reference.update({'referral_code': refCode});
+          }
+        }
+      }
       _srIbanCtrl.clear();
+      _srReferralCtrl.clear();
+      if (!mounted) return;
       setState(() => _srIbanCertUrl = '');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(backgroundColor: LuxuryColors.success, content: Text('تم إرسال طلب توثيق المعرض وشهادة الآيبان للمراجعة بنجاح ✓')),
@@ -465,6 +480,34 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                       _isLoginMode ? 'تسجيل الدخول إلى لوحتك' : 'إنشاء حساب جديد واستكمال البيانات',
                       style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: LuxuryColors.navy),
                     ),
+
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () async {
+                    final addr = _emailCtrl.text.trim();
+                    if (addr.isEmpty || !addr.contains('@')) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('أدخل بريدك الإلكتروني أولاً ثم اضغط نسيت كلمة المرور.')),
+                      );
+                      return;
+                    }
+                    try {
+                      await FirebaseAuth.instance.sendPasswordResetEmail(email: addr);
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.')),
+                      );
+                    } catch (_) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تعذر إرسال رابط الاستعادة، تأكد من صحة البريد الإلكتروني.')),
+                      );
+                    }
+                  },
+                  child: const Text('نسيت كلمة المرور؟', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                ),
+              ),
                     const SizedBox(height: 6),
                     const Text(
                       'بعد الدخول ستنتقل مباشرة لاستكمال بيانات خدمتك وإدارة طلباتك.',
@@ -1035,6 +1078,11 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
               ),
             ),
             const SizedBox(height: 18),
+          TextFormField(
+            controller: _srReferralCtrl,
+            decoration: luxuryInput('كود الإحالة / الدعوة (اختياري)', icon: Icons.card_giftcard_outlined, hint: 'كود المعرض أو الفاحص أو الكابتن (مكافأة 20 ر.س بعد 5 سيارات)'),
+          ),
+          const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -1962,6 +2010,7 @@ class _PartnersPortalScreenState extends State<PartnersPortalScreen> {
                 const Divider(height: 28),
                 Row(
                   children: [
+          const PartnerLaunchPlanBanner(partnerType: 'inspector'),
                     Expanded(child: _bankDropdown(_inspBankCtrl, 'اسم البنك')),
                     const SizedBox(width: 12),
                     Expanded(flex: 2, child: TextFormField(controller: _inspIbanCtrl, decoration: luxuryInput('الآيبان لتحويل أتعاب الفحص (SA + 22 رقماً)'), validator: IbanValidator.validateSaudiIban)),

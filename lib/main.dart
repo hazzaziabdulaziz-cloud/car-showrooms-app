@@ -1,3 +1,4 @@
+import 'core/launch_mode_gate.dart';
 import 'features/shared/about_and_contact_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -194,10 +195,10 @@ class _ShowroomPlatformAppState extends State<ShowroomPlatformApp> {
             actions: [_buildNavSwitcher()],
           ),
           body: _currentTab == 0
-              ? RegionsHomeScreen(
+              ? StealthFoundingGate(onOpenPartners: () => setState(() => _currentTab = 1), child: RegionsHomeScreen(
                   repository: _repository,
                   onOpenPartnerPortal: () => setState(() => _currentTab = 1),
-                )
+                ))
               : PartnersPortalScreen(repository: _repository),
         ),
       ),

@@ -87,4 +87,25 @@ class PricingRules {
     if (shippingTotal <= 0) return 0;
     return shippingTotal - platformTowShare(shippingTotal);
   }
+
+  // مكافأة إحالة معرض موثّق (بعد توثيق السجل والآيبان + رفع 5 سيارات)
+  static const int showroomReferralReward = 20;
+
+  // اشتراكات الفاحصين بعد فترة الإطلاق المجانية
+  static const int inspectorIndividualMonthly = 149;
+  static const int inspectorCenterMonthly = 299;
+
+  // اشتراكات السطحات حسب النوع بعد فترة الإطلاق المجانية
+  static const int towStandardMonthly = 99;
+  static const int towVipHydraulicMonthly = 199;
+  static const int towMultiCarrierMonthly = 349;
+
+  static int inspectorMonthlyPrice(String tier) =>
+      tier == 'center' ? inspectorCenterMonthly : inspectorIndividualMonthly;
+
+  static int towMonthlyPrice(String truckType) {
+    if (truckType == 'multi_carrier') return towMultiCarrierMonthly;
+    if (truckType == 'vip_hydraulic') return towVipHydraulicMonthly;
+    return towStandardMonthly;
+  }
 }

@@ -219,6 +219,7 @@ exports.verifyCommercialRegistrationWithWathq = onCall({ region: "me-central2" }
   }
   const resp = await fetch(`https://api.wathq.sa/v5/commercialregistration/info/${crNumber}`, {
     headers: { apiKey, accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
   });
   if (!resp.ok) {
     throw new HttpsError("failed-precondition", "تعذر التحقق من السجل عبر واثق، تأكد من الرقم.");
